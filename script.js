@@ -16,8 +16,6 @@
 
     game: document.getElementById('game'),
     questionText: document.getElementById('questionText'),
-    answerInput: document.getElementById('answerInput'),
-    submitAnswer: document.getElementById('submitAnswer'),
 
     score: document.getElementById('score'),
     timeText: document.getElementById('time'),
@@ -25,10 +23,10 @@
 
     gameOver: document.getElementById('gameOver'),
     finalScore: document.getElementById('finalScore'),
+    submitScore: document.getElementById('submitScore'),
     playAgain: document.getElementById('playAgain'),
 
-    leaderboardBody: document.getElementById('leaderboardBody'),
-    resetBoard: document.getElementById('resetBoard')
+    leaderboardBody: document.getElementById('leaderboardBody')
   };
 
   let gameState = {
@@ -37,7 +35,8 @@
     correctAnswer: null,
     timerId: null,
     deadlineTs: 0,
-    lastSubmissionTime: 0 // Track last submission time
+    lastSubmissionTime: 0, // Track last submission time
+    scoreSubmitted: false // Track if score has been submitted
   };
 
   function clamp(value, min, max) {
@@ -95,28 +94,6 @@
     }
   }
 
-  async function writeLeaderboard(entries) {
-    try {
-      if (!window.db) {
-        console.warn('Firebase not initialized, using localStorage fallback');
-        writeLeaderboardLocal(entries);
-        return;
-      }
-
-      // Clear existing scores and add new ones
-      // Note: In production, you'd want to handle this more efficiently
-      const q = query(collection(db, "scores"));
-      const snapshot = await getDocs(q);
-      
-      // For now, we'll just add new scores without clearing
-      // The leaderboard will show the top scores automatically
-    } catch (error) {
-      console.error("Error writing leaderboard:", error);
-      console.warn('Falling back to localStorage');
-      writeLeaderboardLocal(entries);
-    }
-  }
-
   function writeLeaderboardLocal(entries) {
     try {
       localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(entries));
@@ -156,12 +133,16 @@
         return trimmed;
       }
 
+      console.log('Adding score to Firebase:', { name: name.trim(), score });
+      
       // Add to Firebase
       await addDoc(collection(db, "scores"), {
         name: name.trim(),
         score: score,
         timestamp: serverTimestamp()
       });
+
+      console.log('Score added successfully to Firebase');
 
       // Return updated leaderboard
       return await readLeaderboard();
@@ -435,58 +416,69 @@
     persistName(gameState.playerName);
 
     gameState.score = 0;
+    gameState.scoreSubmitted = false; // Reset submission state
     updateScoreUI();
     setSections({ showSetup: false, showGame: true, showGameOver: false });
     showQuestion();
   }
 
-  async function endGame(reason) {
+  function endGame(reason) {
     clearTimer();
     setSections({ showSetup: false, showGame: false, showGameOver: true });
     els.finalScore.textContent = String(gameState.score);
-    await addToLeaderboard(gameState.playerName, gameState.score);
-    await renderLeaderboard();
+    
+    // Reset submit button state
+    els.submitScore.disabled = false;
+    els.submitScore.textContent = 'Submit Score';
+    
     if (reason === 'timeout') {
       els.timeText.textContent = '0.0';
       els.timeBar.style.width = '0%';
     }
   }
 
-  function handleSubmit() {
-    // This function is no longer used with multiple choice, but keeping for compatibility
-    return;
+  async function handleSubmitScore() {
+    if (gameState.scoreSubmitted) {
+      console.log('Score already submitted');
+      return;
+    }
+
+    // Disable button and show loading state
+    els.submitScore.disabled = true;
+    els.submitScore.textContent = 'Submitting...';
+    
+    try {
+      // Add score to leaderboard and update display
+      await addToLeaderboard(gameState.playerName, gameState.score);
+      console.log('Score added, updating leaderboard');
+      await renderLeaderboard();
+      
+      // Update button to show success
+      els.submitScore.textContent = 'Score Submitted!';
+      gameState.scoreSubmitted = true;
+    } catch (error) {
+      console.error('Error submitting score:', error);
+      // Re-enable button on error
+      els.submitScore.disabled = false;
+      els.submitScore.textContent = 'Submit Score (Retry)';
+    }
   }
 
   function bindEvents() {
     els.start.addEventListener('click', startGame);
-    els.submitAnswer.addEventListener('click', handleSubmit);
-
-    els.answerInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        handleSubmit();
-      }
-    });
-
+    els.submitScore.addEventListener('click', handleSubmitScore);
     els.playAgain.addEventListener('click', () => {
+      console.log('Play again clicked');
       setSections({ showSetup: true, showGame: false, showGameOver: false });
-      els.answerInput.value = '';
-      els.answerInput.blur();
       els.name.focus();
-    });
-
-    els.resetBoard.addEventListener('click', () => {
-      if (confirm('Clear all leaderboard scores?')) {
-        writeLeaderboard([]);
-        renderLeaderboard();
-      }
     });
   }
 
-  async function init() {
+  function init() {
     restoreName();
-    await renderLeaderboard();
+    renderLeaderboard();
     bindEvents();
+    console.log('Game initialized');
   }
 
   document.addEventListener('DOMContentLoaded', init);
