@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Math Sprint — 10s Per Question</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1 class="title">Math Sprint</h1>
+      <div class="stats">
+        <div class="stat"><span id="score">0</span> Score</div>
+        <div class="stat timer"><span id="time">10.0</span>s</div>
+      </div>
+    </header>
+
+    <section id="setup" class="card">
+      <h2>Get Ready</h2>
+      <div class="setup-row">
+        <label for="playerName" class="label">Name</label>
+        <input id="playerName" class="input" type="text" maxlength="20" placeholder="Enter your name" autocomplete="name">
+        <button id="startBtn" class="btn primary">Start Game</button>
+      </div>
+      <p class="hint">Answer as many questions as you can. You have 10 seconds per question. Faster answers earn more points. One wrong answer or a timeout ends the game.</p>
+    </section>
+
+    <section id="game" class="card hidden" aria-live="polite">
+      <div class="question-row">
+        <div id="questionText" class="question">12 + 7 = ?</div>
+        <div class="progress" aria-label="Time remaining">
+          <div id="timeBar" class="progress-bar"></div>
+        </div>
+      </div>
+      <!-- Multiple choice options will be dynamically inserted here -->
+    </section>
+
+    <section id="gameOver" class="card hidden">
+      <h2>Game Over</h2>
+      <p>Your score: <strong><span id="finalScore">0</span></strong></p>
+      <div class="actions">
+        <button id="playAgain" class="btn primary">Play Again</button>
+      </div>
+    </section>
+
+    <section id="leaderboard" class="card">
+      <div class="leaderboard-header">
+        <h2>Leaderboard</h2>
+        <button id="resetBoard" class="btn danger small" title="Clear all scores">Reset</button>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Name</th>
+              <th>Score</th>
+              <th>Date</th>
+            </tr>
+          </thead>
+          <tbody id="leaderboardBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <small>Tip: Click on an answer option to submit.</small>
+    </footer>
+  </div>
+
+  <script src="script.js" defer></script>
+</body>
+</html> 
