@@ -7,6 +7,7 @@
   const NAME_KEY = 'mathGamePlayerName_v1';
   const LEADERBOARD_LIMIT = 10;
   const MAX_POINTS_PER_QUESTION = 5; // faster answers earn up to this many points
+  const MIN_SUBMISSION_INTERVAL = 2000; // 2 seconds between submissions
 
   const els = {
     setup: document.getElementById('setup'),
@@ -35,7 +36,8 @@
     score: 0,
     correctAnswer: null,
     timerId: null,
-    deadlineTs: 0
+    deadlineTs: 0,
+    lastSubmissionTime: 0 // Track last submission time
   };
 
   function clamp(value, min, max) {
@@ -125,10 +127,29 @@
 
   async function addToLeaderboard(name, score) {
     try {
+      // Client-side rate limiting
+      const currentTime = Date.now();
+      if (currentTime - gameState.lastSubmissionTime < MIN_SUBMISSION_INTERVAL) {
+        console.warn('Submission too fast, ignoring');
+        return await readLeaderboard();
+      }
+      gameState.lastSubmissionTime = currentTime;
+
+      // Input validation
+      if (!name || typeof name !== 'string' || name.trim().length === 0 || name.length > 50) {
+        console.error('Invalid name provided');
+        return await readLeaderboard();
+      }
+
+      if (typeof score !== 'number' || score < 0 || score > 1000 || !Number.isInteger(score)) {
+        console.error('Invalid score provided');
+        return await readLeaderboard();
+      }
+
       if (!window.db) {
         console.warn('Firebase not initialized, using localStorage fallback');
         const entries = readLeaderboardLocal();
-        entries.push({ name, score, ts: Date.now() });
+        entries.push({ name: name.trim(), score, ts: Date.now() });
         entries.sort((a, b) => b.score - a.score || a.ts - b.ts);
         const trimmed = entries.slice(0, LEADERBOARD_LIMIT);
         writeLeaderboardLocal(trimmed);
@@ -137,7 +158,7 @@
 
       // Add to Firebase
       await addDoc(collection(db, "scores"), {
-        name: name,
+        name: name.trim(),
         score: score,
         timestamp: serverTimestamp()
       });
@@ -148,7 +169,7 @@
       console.error("Error adding to leaderboard:", error);
       console.warn('Falling back to localStorage');
       const entries = readLeaderboardLocal();
-      entries.push({ name, score, ts: Date.now() });
+      entries.push({ name: name.trim(), score, ts: Date.now() });
       entries.sort((a, b) => b.score - a.score || a.ts - b.ts);
       const trimmed = entries.slice(0, LEADERBOARD_LIMIT);
       writeLeaderboardLocal(trimmed);
