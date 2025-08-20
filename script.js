@@ -56,7 +56,35 @@
     return Math.max(1, Math.min(MAX_POINTS_PER_QUESTION, raw));
   }
 
-  function readLeaderboard() {
+  async function readLeaderboard() {
+    try {
+      if (!window.db) {
+        console.warn('Firebase not initialized, using localStorage fallback');
+        return readLeaderboardLocal();
+      }
+
+      const q = query(collection(db, "scores"), orderBy("score", "desc"), limit(LEADERBOARD_LIMIT));
+      const snapshot = await getDocs(q);
+      const entries = [];
+      
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        entries.push({
+          name: data.name,
+          score: data.score,
+          ts: data.timestamp?.toDate?.() || new Date()
+        });
+      });
+      
+      return entries;
+    } catch (error) {
+      console.error("Error reading leaderboard:", error);
+      console.warn('Falling back to localStorage');
+      return readLeaderboardLocal();
+    }
+  }
+
+  function readLeaderboardLocal() {
     try {
       const raw = localStorage.getItem(LEADERBOARD_KEY);
       return raw ? JSON.parse(raw) : [];
@@ -65,7 +93,29 @@
     }
   }
 
-  function writeLeaderboard(entries) {
+  async function writeLeaderboard(entries) {
+    try {
+      if (!window.db) {
+        console.warn('Firebase not initialized, using localStorage fallback');
+        writeLeaderboardLocal(entries);
+        return;
+      }
+
+      // Clear existing scores and add new ones
+      // Note: In production, you'd want to handle this more efficiently
+      const q = query(collection(db, "scores"));
+      const snapshot = await getDocs(q);
+      
+      // For now, we'll just add new scores without clearing
+      // The leaderboard will show the top scores automatically
+    } catch (error) {
+      console.error("Error writing leaderboard:", error);
+      console.warn('Falling back to localStorage');
+      writeLeaderboardLocal(entries);
+    }
+  }
+
+  function writeLeaderboardLocal(entries) {
     try {
       localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(entries));
     } catch (_) {
@@ -73,51 +123,81 @@
     }
   }
 
-  function addToLeaderboard(name, score) {
-    const entries = readLeaderboard();
-    entries.push({ name, score, ts: Date.now() });
-    entries.sort((a, b) => b.score - a.score || a.ts - b.ts);
-    const trimmed = entries.slice(0, LEADERBOARD_LIMIT);
-    writeLeaderboard(trimmed);
-    return trimmed;
+  async function addToLeaderboard(name, score) {
+    try {
+      if (!window.db) {
+        console.warn('Firebase not initialized, using localStorage fallback');
+        const entries = readLeaderboardLocal();
+        entries.push({ name, score, ts: Date.now() });
+        entries.sort((a, b) => b.score - a.score || a.ts - b.ts);
+        const trimmed = entries.slice(0, LEADERBOARD_LIMIT);
+        writeLeaderboardLocal(trimmed);
+        return trimmed;
+      }
+
+      // Add to Firebase
+      await addDoc(collection(db, "scores"), {
+        name: name,
+        score: score,
+        timestamp: serverTimestamp()
+      });
+
+      // Return updated leaderboard
+      return await readLeaderboard();
+    } catch (error) {
+      console.error("Error adding to leaderboard:", error);
+      console.warn('Falling back to localStorage');
+      const entries = readLeaderboardLocal();
+      entries.push({ name, score, ts: Date.now() });
+      entries.sort((a, b) => b.score - a.score || a.ts - b.ts);
+      const trimmed = entries.slice(0, LEADERBOARD_LIMIT);
+      writeLeaderboardLocal(trimmed);
+      return trimmed;
+    }
   }
 
-  function renderLeaderboard() {
-    const entries = readLeaderboard();
-    const tbody = els.leaderboardBody;
-    tbody.innerHTML = '';
-    if (entries.length === 0) {
-      const tr = document.createElement('tr');
-      const td = document.createElement('td');
-      td.colSpan = 4;
-      td.textContent = 'No scores yet. Be the first!';
-      td.style.color = '#94a3b8';
-      tr.appendChild(td);
-      tbody.appendChild(tr);
-      return;
+  async function renderLeaderboard() {
+    try {
+      const entries = await readLeaderboard();
+      const tbody = els.leaderboardBody;
+      tbody.innerHTML = '';
+      
+      if (entries.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 4;
+        td.textContent = 'No scores yet. Be the first!';
+        td.style.color = '#94a3b8';
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+        return;
+      }
+      
+      entries.forEach((entry, idx) => {
+        const tr = document.createElement('tr');
+
+        const rank = document.createElement('td');
+        rank.textContent = String(idx + 1);
+        tr.appendChild(rank);
+
+        const name = document.createElement('td');
+        name.textContent = entry.name;
+        tr.appendChild(name);
+
+        const score = document.createElement('td');
+        score.textContent = String(entry.score);
+        tr.appendChild(score);
+
+        const date = document.createElement('td');
+        const d = entry.ts instanceof Date ? entry.ts : new Date(entry.ts);
+        date.textContent = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+        tr.appendChild(date);
+
+        tbody.appendChild(tr);
+      });
+    } catch (error) {
+      console.error("Error rendering leaderboard:", error);
     }
-    entries.forEach((entry, idx) => {
-      const tr = document.createElement('tr');
-
-      const rank = document.createElement('td');
-      rank.textContent = String(idx + 1);
-      tr.appendChild(rank);
-
-      const name = document.createElement('td');
-      name.textContent = entry.name;
-      tr.appendChild(name);
-
-      const score = document.createElement('td');
-      score.textContent = String(entry.score);
-      tr.appendChild(score);
-
-      const date = document.createElement('td');
-      const d = new Date(entry.ts);
-      date.textContent = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-      tr.appendChild(date);
-
-      tbody.appendChild(tr);
-    });
   }
 
   function persistName(name) {
@@ -339,12 +419,12 @@
     showQuestion();
   }
 
-  function endGame(reason) {
+  async function endGame(reason) {
     clearTimer();
     setSections({ showSetup: false, showGame: false, showGameOver: true });
     els.finalScore.textContent = String(gameState.score);
-    addToLeaderboard(gameState.playerName, gameState.score);
-    renderLeaderboard();
+    await addToLeaderboard(gameState.playerName, gameState.score);
+    await renderLeaderboard();
     if (reason === 'timeout') {
       els.timeText.textContent = '0.0';
       els.timeBar.style.width = '0%';
@@ -382,9 +462,9 @@
     });
   }
 
-  function init() {
+  async function init() {
     restoreName();
-    renderLeaderboard();
+    await renderLeaderboard();
     bindEvents();
   }
 
