@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Math Sprint — 10s Per Question</title>
+  <title>Math Attack — 10s Per Question</title>
   <link rel="stylesheet" href="styles.css">
   
   <!-- Firebase SDK -->
@@ -41,7 +41,10 @@
 <body>
   <div class="container">
     <header class="header">
-      <h1 class="title">Math Sprint</h1>
+      <div class="brand">
+        <img src="logo.svg" alt="Math Attack logo" class="logo" onerror="this.style.display='none'">
+        <h1 class="title">Math Attack</h1>
+      </div>
       <div class="stats">
         <div class="stat"><span id="score">0</span> Score</div>
         <div class="stat timer"><span id="time">10.0</span>s</div>
@@ -77,7 +80,7 @@
       </div>
     </section>
 
-    <section id="leaderboard" class="card">
+    <section id="leaderboard" class="card hidden">
       <h2>Leaderboard</h2>
       <div class="table-wrap">
         <table class="table">

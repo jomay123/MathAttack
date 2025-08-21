@@ -26,6 +26,7 @@
     submitScore: document.getElementById('submitScore'),
     playAgain: document.getElementById('playAgain'),
 
+    leaderboard: document.getElementById('leaderboard'),
     leaderboardBody: document.getElementById('leaderboardBody')
   };
 
@@ -377,7 +378,7 @@
     optionsContainer.className = 'options';
     optionsContainer.style.marginTop = '16px';
     
-    q.options.forEach((option, index) => {
+    q.options.forEach((option) => {
       const optionBtn = document.createElement('button');
       optionBtn.className = 'btn option';
       optionBtn.textContent = option;
@@ -394,7 +395,7 @@
 
   function handleOptionClick(selectedValue) {
     const userAnswer = Number(selectedValue);
-    
+
     if (userAnswer === gameState.correctAnswer) {
       const remaining = Math.max(0, gameState.deadlineTs - now());
       const earned = computePoints(remaining);
@@ -419,6 +420,8 @@
     gameState.scoreSubmitted = false; // Reset submission state
     updateScoreUI();
     setSections({ showSetup: false, showGame: true, showGameOver: false });
+    // Hide leaderboard while playing
+    els.leaderboard.classList.add('hidden');
     showQuestion();
   }
 
@@ -427,6 +430,9 @@
     setSections({ showSetup: false, showGame: false, showGameOver: true });
     els.finalScore.textContent = String(gameState.score);
     
+    // Show leaderboard at end of game
+    els.leaderboard.classList.remove('hidden');
+
     // Reset submit button state
     els.submitScore.disabled = false;
     els.submitScore.textContent = 'Submit Score';
@@ -470,6 +476,8 @@
     els.playAgain.addEventListener('click', () => {
       console.log('Play again clicked');
       setSections({ showSetup: true, showGame: false, showGameOver: false });
+      // Hide leaderboard again when returning to setup
+      els.leaderboard.classList.add('hidden');
       els.name.focus();
     });
   }
