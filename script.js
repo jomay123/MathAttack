@@ -3,13 +3,17 @@
 
   const QUESTION_TIME_MS = 10000;
   const TIMER_TICK_MS = 100;
-  const LEADERBOARD_KEY = 'mathGameLeaderboard_v1';
-  const NAME_KEY = 'mathGamePlayerName_v1';
-  const LEADERBOARD_LIMIT = 10;
+  const LEADERBOARD_LIMIT = 50;
   const MAX_POINTS_PER_QUESTION = 5; // faster answers earn up to this many points
   const MIN_SUBMISSION_INTERVAL = 2000; // 2 seconds between submissions
 
   const els = {
+    loginModal: document.getElementById('loginModal'),
+    loginEmail: document.getElementById('loginEmail'),
+    loginBtn: document.getElementById('loginBtn'),
+    loginStatus: document.getElementById('loginStatus'),
+    skipLogin: document.getElementById('skipLogin'),
+
     setup: document.getElementById('setup'),
     name: document.getElementById('playerName'),
     start: document.getElementById('startBtn'),
@@ -36,10 +40,232 @@
     correctAnswer: null,
     timerId: null,
     deadlineTs: 0,
-    lastSubmissionTime: 0, // Track last submission time
-    scoreSubmitted: false // Track if score has been submitted
+    lastSubmissionTime: 0,
+    scoreSubmitted: false,
+    user: null,
+    isAuthenticated: false
   };
 
+  // Check if user is already logged in
+  async function checkAuth() {
+    const { data: { session } } = await window.supabase.auth.getSession();
+    if (session) {
+      gameState.user = session.user;
+      gameState.isAuthenticated = true;
+      console.log('User already logged in:', session.user.email);
+      return true;
+    }
+    return false;
+  }
+
+  // Show login modal
+  function showLoginModal() {
+    els.loginModal.classList.remove('hidden');
+    els.loginEmail.focus();
+  }
+
+  // Hide login modal
+  function hideLoginModal() {
+    els.loginModal.classList.add('hidden');
+    els.loginStatus.classList.add('hidden');
+    els.loginEmail.value = '';
+  }
+
+  // Handle magic link login
+  async function handleLogin() {
+    const email = els.loginEmail.value.trim();
+    if (!email) {
+      showLoginStatus('Please enter your email', 'error');
+      return;
+    }
+
+    els.loginBtn.disabled = true;
+    els.loginBtn.textContent = 'Sending...';
+
+    try {
+      const { error } = await window.supabase.auth.signInWithOtp({
+        email: email,
+        options: {
+          emailRedirectTo: window.location.origin
+        }
+      });
+
+      if (error) {
+        showLoginStatus(error.message, 'error');
+      } else {
+        showLoginStatus('Check your email for a login link!', 'success');
+        els.loginBtn.textContent = 'Link Sent!';
+      }
+    } catch (error) {
+      showLoginStatus('An error occurred. Please try again.', 'error');
+    } finally {
+      els.loginBtn.disabled = false;
+      els.loginBtn.textContent = 'Send Login Link';
+    }
+  }
+
+  // Show login status message
+  function showLoginStatus(message, type) {
+    els.loginStatus.textContent = message;
+    els.loginStatus.className = `login-status ${type}`;
+    els.loginStatus.classList.remove('hidden');
+  }
+
+  // Skip login and play as guest
+  function skipLogin() {
+    hideLoginModal();
+    showSetup();
+  }
+
+  // Show setup screen
+  function showSetup() {
+    els.setup.classList.remove('hidden');
+    els.name.focus();
+  }
+
+  // Ensure user profile exists
+  async function ensureProfile(displayName) {
+    if (!gameState.user) return;
+
+    try {
+      const { error } = await window.supabase
+        .from('users')
+        .upsert({
+          id: gameState.user.id,
+          display_name: displayName,
+        }, { onConflict: 'id' });
+
+      if (error) {
+        console.error('Error ensuring profile:', error);
+      }
+    } catch (error) {
+      console.error('Error ensuring profile:', error);
+    }
+  }
+
+  // Submit today's score to Supabase
+  async function submitTodayScore(score) {
+    if (!gameState.user) {
+      console.log('No user, cannot submit score');
+      return false;
+    }
+
+    try {
+      const todayUTC = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+      
+      // Upsert best-of-day; RLS ensures: only self, only today, only if higher
+      const { error } = await window.supabase
+        .from('daily_scores')
+        .upsert({
+          date: todayUTC,
+          user_id: gameState.user.id,
+          score: score
+        }, { onConflict: 'date,user_id' });
+
+      if (error) {
+        console.error('Error submitting score:', error);
+        return false;
+      }
+
+      console.log('Score submitted successfully');
+      return true;
+    } catch (error) {
+      console.error('Error submitting score:', error);
+      return false;
+    }
+  }
+
+  // Fetch today's leaderboard
+  async function fetchTodayLeaderboard() {
+    try {
+      const todayUTC = new Date().toISOString().slice(0, 10);
+      
+      const { data, error } = await window.supabase
+        .from('daily_scores')
+        .select('score, user_id, created_at')
+        .eq('date', todayUTC)
+        .order('score', { ascending: false })
+        .limit(LEADERBOARD_LIMIT);
+
+      if (error) {
+        console.error('Error fetching leaderboard:', error);
+        return [];
+      }
+
+      // Get user profiles for display names
+      const userIds = data.map(d => d.user_id);
+      const { data: profiles, error: profileError } = await window.supabase
+        .from('user_profiles')
+        .select('id, display_name')
+        .in('id', userIds);
+
+      if (profileError) {
+        console.error('Error fetching profiles:', profileError);
+        return [];
+      }
+
+      const nameById = Object.fromEntries(profiles.map(p => [p.id, p.display_name]));
+      
+      return data.map((row, i) => ({
+        rank: i + 1,
+        name: nameById[row.user_id] || 'Player',
+        score: row.score,
+        time: new Date(row.created_at).toLocaleTimeString(undefined, { 
+          hour: '2-digit', 
+          minute: '2-digit' 
+        })
+      }));
+    } catch (error) {
+      console.error('Error fetching leaderboard:', error);
+      return [];
+    }
+  }
+
+  // Render leaderboard
+  async function renderLeaderboard() {
+    try {
+      const entries = await fetchTodayLeaderboard();
+      const tbody = els.leaderboardBody;
+      tbody.innerHTML = '';
+      
+      if (entries.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 4;
+        td.textContent = 'No scores yet today. Be the first!';
+        td.style.color = '#94a3b8';
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+        return;
+      }
+      
+      entries.forEach((entry) => {
+        const tr = document.createElement('tr');
+
+        const rank = document.createElement('td');
+        rank.textContent = String(entry.rank);
+        tr.appendChild(rank);
+
+        const name = document.createElement('td');
+        name.textContent = entry.name;
+        tr.appendChild(name);
+
+        const score = document.createElement('td');
+        score.textContent = String(entry.score);
+        tr.appendChild(score);
+
+        const time = document.createElement('td');
+        time.textContent = entry.time;
+        tr.appendChild(time);
+
+        tbody.appendChild(tr);
+      });
+    } catch (error) {
+      console.error("Error rendering leaderboard:", error);
+    }
+  }
+
+  // Game functions
   function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
   }
@@ -58,169 +284,8 @@
     return Math.max(1, Math.min(MAX_POINTS_PER_QUESTION, raw));
   }
 
-  async function readLeaderboard() {
-    try {
-      if (!window.db) {
-        console.warn('Firebase not initialized, using localStorage fallback');
-        return readLeaderboardLocal();
-      }
-
-      const q = query(collection(db, "scores"), orderBy("score", "desc"), limit(LEADERBOARD_LIMIT));
-      const snapshot = await getDocs(q);
-      const entries = [];
-      
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        entries.push({
-          name: data.name,
-          score: data.score,
-          ts: data.timestamp?.toDate?.() || new Date()
-        });
-      });
-      
-      return entries;
-    } catch (error) {
-      console.error("Error reading leaderboard:", error);
-      console.warn('Falling back to localStorage');
-      return readLeaderboardLocal();
-    }
-  }
-
-  function readLeaderboardLocal() {
-    try {
-      const raw = localStorage.getItem(LEADERBOARD_KEY);
-      return raw ? JSON.parse(raw) : [];
-    } catch (_) {
-      return [];
-    }
-  }
-
-  function writeLeaderboardLocal(entries) {
-    try {
-      localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(entries));
-    } catch (_) {
-      // ignore
-    }
-  }
-
-  async function addToLeaderboard(name, score) {
-    try {
-      // Client-side rate limiting
-      const currentTime = Date.now();
-      if (currentTime - gameState.lastSubmissionTime < MIN_SUBMISSION_INTERVAL) {
-        console.warn('Submission too fast, ignoring');
-        return await readLeaderboard();
-      }
-      gameState.lastSubmissionTime = currentTime;
-
-      // Input validation
-      if (!name || typeof name !== 'string' || name.trim().length === 0 || name.length > 50) {
-        console.error('Invalid name provided');
-        return await readLeaderboard();
-      }
-
-      if (typeof score !== 'number' || score < 0 || score > 1000 || !Number.isInteger(score)) {
-        console.error('Invalid score provided');
-        return await readLeaderboard();
-      }
-
-      if (!window.db) {
-        console.warn('Firebase not initialized, using localStorage fallback');
-        const entries = readLeaderboardLocal();
-        entries.push({ name: name.trim(), score, ts: Date.now() });
-        entries.sort((a, b) => b.score - a.score || a.ts - b.ts);
-        const trimmed = entries.slice(0, LEADERBOARD_LIMIT);
-        writeLeaderboardLocal(trimmed);
-        return trimmed;
-      }
-
-      console.log('Adding score to Firebase:', { name: name.trim(), score });
-      
-      // Add to Firebase
-      await addDoc(collection(db, "scores"), {
-        name: name.trim(),
-        score: score,
-        timestamp: serverTimestamp()
-      });
-
-      console.log('Score added successfully to Firebase');
-
-      // Return updated leaderboard
-      return await readLeaderboard();
-    } catch (error) {
-      console.error("Error adding to leaderboard:", error);
-      console.warn('Falling back to localStorage');
-      const entries = readLeaderboardLocal();
-      entries.push({ name: name.trim(), score, ts: Date.now() });
-      entries.sort((a, b) => b.score - a.score || a.ts - b.ts);
-      const trimmed = entries.slice(0, LEADERBOARD_LIMIT);
-      writeLeaderboardLocal(trimmed);
-      return trimmed;
-    }
-  }
-
-  async function renderLeaderboard() {
-    try {
-      const entries = await readLeaderboard();
-      const tbody = els.leaderboardBody;
-      tbody.innerHTML = '';
-      
-      if (entries.length === 0) {
-        const tr = document.createElement('tr');
-        const td = document.createElement('td');
-        td.colSpan = 4;
-        td.textContent = 'No scores yet. Be the first!';
-        td.style.color = '#94a3b8';
-        tr.appendChild(td);
-        tbody.appendChild(tr);
-        return;
-      }
-      
-      entries.forEach((entry, idx) => {
-        const tr = document.createElement('tr');
-
-        const rank = document.createElement('td');
-        rank.textContent = String(idx + 1);
-        tr.appendChild(rank);
-
-        const name = document.createElement('td');
-        name.textContent = entry.name;
-        tr.appendChild(name);
-
-        const score = document.createElement('td');
-        score.textContent = String(entry.score);
-        tr.appendChild(score);
-
-        const date = document.createElement('td');
-        const d = entry.ts instanceof Date ? entry.ts : new Date(entry.ts);
-        date.textContent = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-        tr.appendChild(date);
-
-        tbody.appendChild(tr);
-      });
-    } catch (error) {
-      console.error("Error rendering leaderboard:", error);
-    }
-  }
-
-  function persistName(name) {
-    try {
-      localStorage.setItem(NAME_KEY, name);
-    } catch (_) {
-      // ignore
-    }
-  }
-
-  function restoreName() {
-    try {
-      const n = localStorage.getItem(NAME_KEY);
-      if (n) els.name.value = n;
-    } catch (_) {
-      // ignore
-    }
-  }
-
-  function setSections({ showSetup, showGame, showGameOver }) {
+  function setSections({ showLogin, showSetup, showGame, showGameOver }) {
+    els.loginModal.classList.toggle('hidden', !showLogin);
     els.setup.classList.toggle('hidden', !showSetup);
     els.game.classList.toggle('hidden', !showGame);
     els.gameOver.classList.toggle('hidden', !showGameOver);
@@ -256,7 +321,6 @@
   }
 
   function difficultyForScore(score) {
-    // Start moderately harder than original, ramp up faster
     if (score < 3) return 'medium';
     if (score < 8) return 'hard';
     return 'insane';
@@ -277,13 +341,10 @@
     while (wrongs.size < 3) {
       let wrong;
       if (Math.random() < 0.3) {
-        // Off-by-one errors
         wrong = correct + (Math.random() < 0.5 ? 1 : -1);
       } else if (Math.random() < 0.4) {
-        // Off-by-small amounts
         wrong = correct + randInt(-range, range);
       } else {
-        // Completely random in reasonable range
         const min = Math.max(0, correct - range * 2);
         const max = correct + range * 2;
         wrong = randInt(min, max);
@@ -318,7 +379,7 @@
       case '-': {
         const range = diff === 'medium' ? 15 : diff === 'hard' ? 35 : 80;
         a = randInt(range, range * 2);
-        b = randInt(0, a); // ensure non-negative
+        b = randInt(0, a);
         answer = a - b;
         break;
       }
@@ -335,7 +396,7 @@
         b = randInt(2, base);
         const multiple = diff === 'medium' ? randInt(2, 8) : diff === 'hard' ? randInt(2, 12) : randInt(2, 15);
         answer = multiple;
-        a = b * multiple; // ensures integer division
+        a = b * multiple;
         break;
       }
       default: {
@@ -346,11 +407,9 @@
     const symbol = op;
     const questionText = `${a} ${symbol} ${b} = ?`;
     
-    // Generate 3 wrong answers
     const wrongAnswers = generateWrongAnswers(answer, diff);
-    
-    // Create 4 options with correct answer in random position
     const allOptions = [...wrongAnswers, answer];
+    
     for (let i = allOptions.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [allOptions[i], allOptions[j]] = [allOptions[j], allOptions[i]];
@@ -367,13 +426,11 @@
     const q = generateQuestion(gameState.score);
     gameState.correctAnswer = q.answer;
     
-    // Clear previous options
     const existingOptions = document.querySelectorAll('.option');
     existingOptions.forEach(opt => opt.remove());
     
     els.questionText.textContent = q.text;
     
-    // Create multiple choice options
     const optionsContainer = document.createElement('div');
     optionsContainer.className = 'options';
     optionsContainer.style.marginTop = '16px';
@@ -387,7 +444,6 @@
       optionsContainer.appendChild(optionBtn);
     });
     
-    // Insert options after the question
     els.questionText.parentNode.insertBefore(optionsContainer, els.questionText.nextSibling);
     
     startTimer();
@@ -414,26 +470,27 @@
   function startGame() {
     const rawName = (els.name.value || '').trim();
     gameState.playerName = rawName || 'Player';
-    persistName(gameState.playerName);
+    
+    if (gameState.isAuthenticated) {
+      ensureProfile(gameState.playerName);
+    }
 
     gameState.score = 0;
-    gameState.scoreSubmitted = false; // Reset submission state
+    gameState.scoreSubmitted = false;
     updateScoreUI();
-    setSections({ showSetup: false, showGame: true, showGameOver: false });
-    // Hide leaderboard while playing
+    setSections({ showLogin: false, showSetup: false, showGame: true, showGameOver: false });
     els.leaderboard.classList.add('hidden');
     showQuestion();
   }
 
   function endGame(reason) {
     clearTimer();
-    setSections({ showSetup: false, showGame: false, showGameOver: true });
+    setSections({ showLogin: false, showSetup: false, showGame: false, showGameOver: true });
     els.finalScore.textContent = String(gameState.score);
     
-    // Show leaderboard at end of game
     els.leaderboard.classList.remove('hidden');
+    renderLeaderboard();
 
-    // Reset submit button state
     els.submitScore.disabled = false;
     els.submitScore.textContent = 'Submit Score';
     
@@ -449,45 +506,89 @@
       return;
     }
 
-    // Disable button and show loading state
+    if (!gameState.isAuthenticated) {
+      showLoginStatus('Please log in to submit your score', 'error');
+      showLoginModal();
+      return;
+    }
+
     els.submitScore.disabled = true;
     els.submitScore.textContent = 'Submitting...';
     
     try {
-      // Add score to leaderboard and update display
-      await addToLeaderboard(gameState.playerName, gameState.score);
-      console.log('Score added, updating leaderboard');
-      await renderLeaderboard();
+      const success = await submitTodayScore(gameState.score);
       
-      // Update button to show success
-      els.submitScore.textContent = 'Score Submitted!';
-      gameState.scoreSubmitted = true;
+      if (success) {
+        els.submitScore.textContent = 'Score Submitted!';
+        gameState.scoreSubmitted = true;
+        await renderLeaderboard(); // Refresh leaderboard
+      } else {
+        els.submitScore.textContent = 'Submit Score (Retry)';
+        els.submitScore.disabled = false;
+      }
     } catch (error) {
       console.error('Error submitting score:', error);
-      // Re-enable button on error
-      els.submitScore.disabled = false;
       els.submitScore.textContent = 'Submit Score (Retry)';
+      els.submitScore.disabled = false;
     }
   }
 
   function bindEvents() {
+    // Login events
+    els.loginBtn.addEventListener('click', handleLogin);
+    els.skipLogin.addEventListener('click', skipLogin);
+    els.loginEmail.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') handleLogin();
+    });
+
+    // Game events
     els.start.addEventListener('click', startGame);
     els.submitScore.addEventListener('click', handleSubmitScore);
     els.playAgain.addEventListener('click', () => {
       console.log('Play again clicked');
-      setSections({ showSetup: true, showGame: false, showGameOver: false });
-      // Hide leaderboard again when returning to setup
+      setSections({ showLogin: false, showSetup: true, showGame: false, showGameOver: false });
       els.leaderboard.classList.add('hidden');
       els.name.focus();
     });
   }
 
-  function init() {
-    restoreName();
-    renderLeaderboard();
-    bindEvents();
-    console.log('Game initialized');
+  async function init() {
+    try {
+      // Check if user is already logged in
+      const isLoggedIn = await checkAuth();
+      
+      if (isLoggedIn) {
+        // User is logged in, show setup directly
+        showSetup();
+      } else {
+        // Show login modal
+        showLoginModal();
+      }
+      
+      bindEvents();
+      console.log('Game initialized');
+    } catch (error) {
+      console.error('Error during initialization:', error);
+      // Fallback to login modal
+      showLoginModal();
+      bindEvents();
+    }
   }
+
+  // Listen for auth state changes
+  window.supabase.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'SIGNED_IN' && session) {
+      gameState.user = session.user;
+      gameState.isAuthenticated = true;
+      console.log('User signed in:', session.user.email);
+      hideLoginModal();
+      showSetup();
+    } else if (event === 'SIGNED_OUT') {
+      gameState.user = null;
+      gameState.isAuthenticated = false;
+      console.log('User signed out');
+    }
+  });
 
   document.addEventListener('DOMContentLoaded', init);
 })(); 

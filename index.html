@@ -6,36 +6,16 @@
   <title>Math Attack — 10s Per Question</title>
   <link rel="stylesheet" href="styles.css">
   
-  <!-- Firebase SDK -->
+  <!-- Supabase SDK -->
   <script type="module">
-    // Import the functions you need from the SDKs you need
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getFirestore, collection, addDoc, query, orderBy, limit, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-
-    // Your web app's Firebase configuration
-    const firebaseConfig = {
-      apiKey: "AIzaSyB7NtGE1uxusApuxiPgTOFcs_Jwqr8GV5g",
-      authDomain: "mathattack-74ba2.firebaseapp.com",
-      projectId: "mathattack-74ba2",
-      storageBucket: "mathattack-74ba2.firebasestorage.app",
-      messagingSenderId: "1030237520511",
-      appId: "1:1030237520511:web:3f7c2d1084e30c38d3754a",
-      measurementId: "G-9Q7WX40K5K"
-    };
-
-    // Initialize Firebase
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-
-    // Make db available globally
-    window.db = db;
-    window.collection = collection;
-    window.addDoc = addDoc;
-    window.query = query;
-    window.orderBy = orderBy;
-    window.limit = limit;
-    window.getDocs = getDocs;
-    window.serverTimestamp = serverTimestamp;
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+    
+    // Your Supabase configuration
+    const supabaseUrl = 'https://trtlrzbcwaiyibzlpent.supabase.co'
+    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRydGxyemJjd2FpeWliemxwZW50Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU3ODc4MDAsImV4cCI6MjA3MTM2MzgwMH0.ualTzdDZwgErM7W4XOGCH1xwfPag_n7bSNwsoNV6pUM'
+    
+    // Initialize Supabase
+    window.supabase = createClient(supabaseUrl, supabaseAnonKey)
   </script>
 </head>
 <body>
@@ -51,11 +31,30 @@
       </div>
     </header>
 
-    <section id="setup" class="card">
+    <!-- Login Modal -->
+    <div id="loginModal" class="modal hidden">
+      <div class="modal-content">
+        <h2>Welcome to Math Attack!</h2>
+        <p>Sign in to save your scores and compete on the leaderboard.</p>
+        
+        <div class="login-form">
+          <input id="loginEmail" type="email" placeholder="Enter your email" class="input">
+          <button id="loginBtn" class="btn primary">Send Login Link</button>
+        </div>
+        
+        <div id="loginStatus" class="login-status hidden"></div>
+        
+        <div class="modal-footer">
+          <button id="skipLogin" class="btn">Play Without Account</button>
+        </div>
+      </div>
+    </div>
+
+    <section id="setup" class="card hidden">
       <h2>Get Ready</h2>
       <div class="setup-row">
-        <label for="playerName" class="label">Name</label>
-        <input id="playerName" class="input" type="text" maxlength="20" placeholder="Enter your name" autocomplete="name">
+        <label for="playerName" class="label">Display Name</label>
+        <input id="playerName" class="input" type="text" maxlength="20" placeholder="Enter your display name" autocomplete="name">
         <button id="startBtn" class="btn primary">Start Game</button>
       </div>
       <p class="hint">Answer as many questions as you can. You have 10 seconds per question. Faster answers earn more points. One wrong answer or a timeout ends the game.</p>
@@ -81,7 +80,7 @@
     </section>
 
     <section id="leaderboard" class="card hidden">
-      <h2>Leaderboard</h2>
+      <h2>Today's Leaderboard</h2>
       <div class="table-wrap">
         <table class="table">
           <thead>
@@ -89,7 +88,7 @@
               <th>#</th>
               <th>Name</th>
               <th>Score</th>
-              <th>Date</th>
+              <th>Time</th>
             </tr>
           </thead>
           <tbody id="leaderboardBody"></tbody>

@@ -88,6 +88,79 @@ body {
   color: var(--text);
 }
 
+/* Modal Styles */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-content {
+  background: var(--card);
+  border: 1px solid rgba(244,63,94,0.25);
+  border-radius: 20px;
+  padding: 32px;
+  max-width: 480px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+
+.modal-content h2 {
+  margin: 0 0 16px 0;
+  color: var(--text);
+  font-size: 28px;
+}
+
+.modal-content p {
+  margin: 0 0 24px 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.login-status {
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-weight: 500;
+}
+
+.login-status.success {
+  background: rgba(34,197,94,0.1);
+  border: 1px solid rgba(34,197,94,0.3);
+  color: var(--success);
+}
+
+.login-status.error {
+  background: rgba(239,68,68,0.1);
+  border: 1px solid rgba(239,68,68,0.3);
+  color: var(--danger);
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+
 .card {
   background: var(--card);
   border: 1px solid rgba(244,63,94,0.15);
@@ -276,6 +349,15 @@ body {
   .btn.option {
     font-size: 16px;
     padding: 14px 16px;
+  }
+
+  .modal-content {
+    padding: 24px;
+    margin: 16px;
+  }
+
+  .modal-footer {
+    flex-direction: column;
   }
 }
 
