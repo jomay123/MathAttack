@@ -203,15 +203,7 @@
     if (!gameState.eventsBound) {
       bindEvents();
       gameState.eventsBound = true;
-      console.log('Events bound in showSetup');
     }
-    
-    // Test direct event binding
-    console.log('Adding direct click listener to start button');
-    els.start.onclick = () => {
-      console.log('Direct onclick triggered!');
-      startGame();
-    };
   }
 
   // Ensure user profile exists
@@ -234,145 +226,8 @@
     }
   }
 
-  // Test basic network connectivity to Supabase
-  async function testNetworkConnectivity() {
-    console.log('🌐 Testing network connectivity to Supabase...');
-    
-    try {
-      // Test 1: Basic fetch to Supabase URL
-      const supabaseUrl = window.supabase.supabaseUrl;
-      console.log('Testing fetch to:', supabaseUrl);
-      
-      const response = await fetch(supabaseUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      console.log('Network response status:', response.status);
-      console.log('Network response ok:', response.ok);
-      
-      if (response.ok) {
-        console.log('✓ Network connectivity to Supabase working');
-        return true;
-      } else {
-        console.error('✗ Network response not ok:', response.status, response.statusText);
-        return false;
-      }
-    } catch (error) {
-      console.error('✗ Network connectivity test failed:', error);
-      return false;
-    }
-  }
-
-  // Test Supabase connection
-  async function testSupabaseConnection() {
-    console.log('Testing Supabase connection...');
-    console.log('Supabase URL:', window.supabase.supabaseUrl);
-    console.log('Supabase anon key length:', window.supabase.supabaseKey?.length || 'undefined');
-    
-    // Test network connectivity first
-    const networkOk = await testNetworkConnectivity();
-    if (!networkOk) {
-      console.error('❌ Network connectivity failed - this is likely the root cause');
-      return false;
-    }
-    
-    try {
-      // Test 1: Basic Supabase client initialization
-      console.log('Test 1: Checking Supabase client...');
-      if (!window.supabase) {
-        console.error('Supabase client not found');
-        return false;
-      }
-      console.log('✓ Supabase client exists');
-      
-      // Test 2: Authentication check
-      console.log('Test 2: Checking authentication...');
-      const { data: { user }, error: userError } = await window.supabase.auth.getUser();
-      console.log('Auth test - user:', user, 'error:', userError);
-      
-      if (userError) {
-        console.error('✗ Auth test failed:', userError);
-        return false;
-      }
-      console.log('✓ Authentication working');
-      
-      // Test 3: Basic database connection (simple select)
-      console.log('Test 3: Testing basic database connection...');
-      const { data: testData, error: testError } = await window.supabase
-        .from('users')
-        .select('id')
-        .limit(1);
-      
-      console.log('Basic DB test - data:', testData, 'error:', testError);
-      
-      if (testError) {
-        console.error('✗ Basic database connection failed:', testError);
-        return false;
-      }
-      console.log('✓ Basic database connection working');
-      
-      // Test 4: Check if daily_scores table exists
-      console.log('Test 4: Checking daily_scores table...');
-      const { data: tableCheck, error: tableError } = await window.supabase
-        .from('daily_scores')
-        .select('*')
-        .limit(0); // Just check if table exists, don't fetch data
-      
-      console.log('Table check - data:', tableCheck, 'error:', tableError);
-      
-      if (tableError) {
-        console.error('✗ daily_scores table check failed:', tableError);
-        console.error('This suggests the table might not exist or you lack permissions');
-        return false;
-      }
-      console.log('✓ daily_scores table accessible');
-      
-      // Test 5: Check RLS policies by trying to insert a test record
-      console.log('Test 5: Testing insert permissions...');
-      const testDate = new Date().toISOString().slice(0, 10);
-      const { data: insertTest, error: insertError } = await window.supabase
-        .from('daily_scores')
-        .insert({
-          date: testDate,
-          user_id: user.id,
-          score: 999 // Test score
-        })
-        .select();
-      
-      console.log('Insert test - data:', insertTest, 'error:', insertError);
-      
-      if (insertError) {
-        console.error('✗ Insert test failed:', insertError);
-        console.error('This suggests RLS policies are blocking the insert');
-        return false;
-      }
-      console.log('✓ Insert permissions working');
-      
-      // Clean up test record
-      if (insertTest && insertTest.length > 0) {
-        await window.supabase
-          .from('daily_scores')
-          .delete()
-          .eq('id', insertTest[0].id);
-        console.log('✓ Test record cleaned up');
-      }
-      
-      console.log('🎉 All Supabase tests passed!');
-      return true;
-    } catch (error) {
-      console.error('❌ Supabase connection test exception:', error);
-      return false;
-    }
-  }
-
   // Submit today's score to Supabase
   async function submitTodayScore(score) {
-    console.log('submitTodayScore called with score:', score);
-    console.log('Current user:', gameState.user);
-    
     if (!gameState.user) {
       console.log('No user, cannot submit score');
       return false;
@@ -380,26 +235,15 @@
 
     try {
       const todayUTC = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-      console.log('Submitting score for date:', todayUTC);
-      console.log('User ID:', gameState.user.id);
-      
-      // Add timeout to prevent hanging
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Score submission timeout after 10 seconds')), 10000);
-      });
       
       // Upsert best-of-day; RLS ensures: only self, only today, only if higher
-      const supabasePromise = window.supabase
+      const { error } = await window.supabase
         .from('daily_scores')
         .upsert({
           date: todayUTC,
           user_id: gameState.user.id,
           score: score
         }, { onConflict: 'date,user_id' });
-
-      console.log('About to await Supabase upsert...');
-      const { data, error } = await Promise.race([supabasePromise, timeoutPromise]);
-      console.log('Supabase response - data:', data, 'error:', error);
 
       if (error) {
         console.error('Error submitting score:', error);
@@ -409,7 +253,7 @@
       console.log('Score submitted successfully');
       return true;
     } catch (error) {
-      console.error('Exception in submitTodayScore:', error);
+      console.error('Error submitting score:', error);
       return false;
     }
   }
@@ -524,16 +368,10 @@
   }
 
   function setSections({ showLogin, showSetup, showGame, showGameOver }) {
-    console.log('setSections called with:', { showLogin, showSetup, showGame, showGameOver });
     els.loginModal.classList.toggle('hidden', !showLogin);
     els.setup.classList.toggle('hidden', !showSetup);
     els.game.classList.toggle('hidden', !showGame);
     els.gameOver.classList.toggle('hidden', !showGameOver);
-    console.log('Sections updated. Current visibility:');
-    console.log('loginModal hidden:', els.loginModal.classList.contains('hidden'));
-    console.log('setup hidden:', els.setup.classList.contains('hidden'));
-    console.log('game hidden:', els.game.classList.contains('hidden'));
-    console.log('gameOver hidden:', els.gameOver.classList.contains('hidden'));
   }
 
   function updateTimerUI(remainingMs) {
@@ -668,9 +506,7 @@
   }
 
   function showQuestion() {
-    console.log('showQuestion called');
     const q = generateQuestion(gameState.score);
-    console.log('Generated question:', q);
     gameState.correctAnswer = q.answer;
     
     const existingOptions = document.querySelectorAll('.option');
@@ -692,9 +528,7 @@
     });
     
     els.questionText.parentNode.insertBefore(optionsContainer, els.questionText.nextSibling);
-    console.log('Question displayed, starting timer');
     startTimer();
-    console.log('showQuestion completed');
   }
 
   function handleOptionClick(selectedValue) {
@@ -716,25 +550,19 @@
   }
 
   function startGame() {
-    console.log('startGame called');
     const rawName = (els.name.value || '').trim();
     gameState.playerName = rawName || 'Player';
-    console.log('Player name:', gameState.playerName);
     
     if (gameState.isAuthenticated) {
-      console.log('User authenticated, ensuring profile');
       ensureProfile(gameState.playerName);
     }
 
     gameState.score = 0;
     gameState.scoreSubmitted = false;
     updateScoreUI();
-    console.log('Setting sections to show game');
     setSections({ showLogin: false, showSetup: false, showGame: true, showGameOver: false });
     els.leaderboard.classList.add('hidden');
-    console.log('About to show question');
     showQuestion();
-    console.log('startGame completed');
   }
 
   function endGame(reason) {
@@ -748,11 +576,6 @@
     els.submitScore.disabled = false;
     els.submitScore.textContent = 'Submit Score';
     
-    // Test Supabase connection when game ends
-    if (gameState.isAuthenticated) {
-      testSupabaseConnection();
-    }
-    
     if (reason === 'timeout') {
       els.timeText.textContent = '0.0';
       els.timeBar.style.width = '0%';
@@ -760,98 +583,41 @@
   }
 
   async function handleSubmitScore() {
-    console.log('handleSubmitScore called');
-    console.log('Score already submitted:', gameState.scoreSubmitted);
-    console.log('User authenticated:', gameState.isAuthenticated);
-    
     if (gameState.scoreSubmitted) {
       console.log('Score already submitted');
       return;
     }
 
     if (!gameState.isAuthenticated) {
-      console.log('User not authenticated, showing login modal');
       showLoginStatus('Please log in to submit your score', 'error');
       showLoginModal();
       return;
     }
 
-    console.log('Starting score submission...');
     els.submitScore.disabled = true;
     els.submitScore.textContent = 'Submitting...';
     
     try {
-      console.log('Calling submitTodayScore...');
       const success = await submitTodayScore(gameState.score);
-      console.log('submitTodayScore result:', success);
       
       if (success) {
-        console.log('Score submission successful, updating UI');
         els.submitScore.textContent = 'Score Submitted!';
         gameState.scoreSubmitted = true;
-        console.log('Refreshing leaderboard...');
         await renderLeaderboard(); // Refresh leaderboard
-        console.log('Leaderboard refreshed');
       } else {
-        console.log('Score submission failed, re-enabling button');
         els.submitScore.textContent = 'Submit Score (Retry)';
         els.submitScore.disabled = false;
-        // Add manual retry button
-        addRetryButton();
       }
     } catch (error) {
-      console.error('Exception in handleSubmitScore:', error);
+      console.error('Error submitting score:', error);
       els.submitScore.textContent = 'Submit Score (Retry)';
       els.submitScore.disabled = false;
-      // Add manual retry button
-      addRetryButton();
     }
   }
 
-  // Manual retry function for score submission
-  async function retryScoreSubmission() {
-    console.log('Manual retry of score submission');
-    if (!gameState.scoreSubmitted) {
-      await handleSubmitScore();
-    }
-  }
 
-  // Add retry button to the game over screen
-  function addRetryButton() {
-    // Remove existing retry button if it exists
-    const existingRetry = document.getElementById('retryScore');
-    if (existingRetry) {
-      existingRetry.remove();
-    }
-    
-    // Create new retry button
-    const retryBtn = document.createElement('button');
-    retryBtn.id = 'retryScore';
-    retryBtn.className = 'btn secondary';
-    retryBtn.textContent = 'Retry Submission';
-    retryBtn.addEventListener('click', retryScoreSubmission);
-    
-    // Insert after the submit score button
-    els.submitScore.parentNode.insertBefore(retryBtn, els.submitScore.nextSibling);
-    
-    // Add diagnostic test button
-    const testBtn = document.createElement('button');
-    testBtn.id = 'testConnection';
-    testBtn.className = 'btn secondary';
-    testBtn.textContent = 'Test Connection';
-    testBtn.addEventListener('click', () => {
-      console.log('Manual connection test triggered');
-      testSupabaseConnection();
-    });
-    
-    // Insert after the retry button
-    retryBtn.parentNode.insertBefore(testBtn, retryBtn.nextSibling);
-  }
 
   function bindEvents() {
-    console.log('bindEvents called');
-    console.log('start button element:', els.start);
-    
     // Login events
     els.loginBtn.addEventListener('click', handleLogin);
     els.signupBtn.addEventListener('click', handleSignup);
@@ -864,10 +630,7 @@
     });
 
     // Game events
-    els.start.addEventListener('click', () => {
-      console.log('Start button clicked!');
-      startGame();
-    });
+    els.start.addEventListener('click', startGame);
     els.submitScore.addEventListener('click', handleSubmitScore);
     els.playAgain.addEventListener('click', () => {
       console.log('Play again clicked');
@@ -875,8 +638,6 @@
       els.leaderboard.classList.add('hidden');
       els.name.focus();
     });
-    
-    console.log('All event listeners attached');
   }
 
   async function init() {
