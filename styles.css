@@ -88,6 +88,14 @@ body {
   color: var(--text);
 }
 
+.daily-wins {
+  color: var(--text);
+}
+
+.daily-wins.hidden {
+  display: none;
+}
+
 /* Modal Styles */
 .modal {
   position: fixed;
@@ -217,6 +225,16 @@ body {
 
 .btn.primary:hover {
   background: var(--primary-600);
+}
+
+.btn.secondary {
+  background: rgba(244,63,94,0.2);
+  border: 1px solid rgba(244,63,94,0.3);
+}
+
+.btn.secondary:hover {
+  background: rgba(244,63,94,0.3);
+  border-color: rgba(244,63,94,0.4);
 }
 
 .btn.danger {
