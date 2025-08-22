@@ -253,6 +253,12 @@ body {
   align-items: end;
 }
 
+.setup-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+}
+
 .hint {
   margin-top: 8px;
   color: var(--muted);
