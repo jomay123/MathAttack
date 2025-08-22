@@ -34,7 +34,9 @@
     playAgain: document.getElementById('playAgain'),
 
     leaderboard: document.getElementById('leaderboard'),
-    leaderboardBody: document.getElementById('leaderboardBody')
+    leaderboardBody: document.getElementById('leaderboardBody'),
+    dailyWinsLeaderboard: document.getElementById('dailyWinsLeaderboard'),
+    dailyWinsLeaderboardBody: document.getElementById('dailyWinsLeaderboardBody')
   };
 
   let gameState = {
@@ -204,6 +206,17 @@
       bindEvents();
       gameState.eventsBound = true;
     }
+    
+    // Show leaderboards for logged-in users
+    if (gameState.isAuthenticated) {
+      els.leaderboard.classList.remove('hidden');
+      els.dailyWinsLeaderboard.classList.remove('hidden');
+      renderLeaderboard();
+      renderDailyWinsLeaderboard();
+    } else {
+      els.leaderboard.classList.add('hidden');
+      els.dailyWinsLeaderboard.classList.add('hidden');
+    }
   }
 
   // Ensure user profile exists
@@ -301,6 +314,93 @@
     } catch (error) {
       console.error('Error fetching leaderboard:', error);
       return [];
+    }
+  }
+
+  // Fetch daily wins leaderboard
+  async function fetchDailyWinsLeaderboard() {
+    try {
+      const { data, error } = await window.supabase
+        .from('daily_winners')
+        .select('user_id, date')
+        .order('date', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching daily wins leaderboard:', error);
+        return [];
+      }
+
+      // Count wins per user
+      const winsByUser = {};
+      data.forEach(win => {
+        winsByUser[win.user_id] = (winsByUser[win.user_id] || 0) + 1;
+      });
+
+      // Get user profiles for display names
+      const userIds = Object.keys(winsByUser);
+      const { data: profiles, error: profileError } = await window.supabase
+        .from('user_profiles')
+        .select('id, display_name')
+        .in('id', userIds);
+
+      if (profileError) {
+        console.error('Error fetching profiles for daily wins:', profileError);
+        return [];
+      }
+
+      const nameById = Object.fromEntries(profiles.map(p => [p.id, p.display_name]));
+      
+      // Convert to array and sort by wins
+      const leaderboardData = Object.entries(winsByUser).map(([userId, wins]) => ({
+        userId,
+        name: nameById[userId] || 'Player',
+        wins
+      })).sort((a, b) => b.wins - a.wins);
+
+      return leaderboardData;
+    } catch (error) {
+      console.error('Error fetching daily wins leaderboard:', error);
+      return [];
+    }
+  }
+
+  // Render daily wins leaderboard
+  async function renderDailyWinsLeaderboard() {
+    try {
+      const entries = await fetchDailyWinsLeaderboard();
+      const tbody = els.dailyWinsLeaderboardBody;
+      tbody.innerHTML = '';
+      
+      if (entries.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 3;
+        td.textContent = 'No daily wins yet. Be the first!';
+        td.style.color = '#94a3b8';
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+        return;
+      }
+      
+      entries.forEach((entry, index) => {
+        const tr = document.createElement('tr');
+
+        const rank = document.createElement('td');
+        rank.textContent = String(index + 1);
+        tr.appendChild(rank);
+
+        const name = document.createElement('td');
+        name.textContent = entry.name;
+        tr.appendChild(name);
+
+        const wins = document.createElement('td');
+        wins.textContent = String(entry.wins);
+        tr.appendChild(wins);
+
+        tbody.appendChild(tr);
+      });
+    } catch (error) {
+      console.error("Error rendering daily wins leaderboard:", error);
     }
   }
 
@@ -562,6 +662,7 @@
     updateScoreUI();
     setSections({ showLogin: false, showSetup: false, showGame: true, showGameOver: false });
     els.leaderboard.classList.add('hidden');
+    els.dailyWinsLeaderboard.classList.add('hidden');
     showQuestion();
   }
 
@@ -571,7 +672,9 @@
     els.finalScore.textContent = String(gameState.score);
     
     els.leaderboard.classList.remove('hidden');
+    els.dailyWinsLeaderboard.classList.remove('hidden');
     renderLeaderboard();
+    renderDailyWinsLeaderboard();
 
     els.submitScore.disabled = false;
     els.submitScore.textContent = 'Submit Score';
@@ -603,7 +706,8 @@
       if (success) {
         els.submitScore.textContent = 'Score Submitted!';
         gameState.scoreSubmitted = true;
-        await renderLeaderboard(); // Refresh leaderboard
+        await renderLeaderboard(); // Refresh daily scores leaderboard
+        await renderDailyWinsLeaderboard(); // Refresh daily wins leaderboard
       } else {
         els.submitScore.textContent = 'Submit Score (Retry)';
         els.submitScore.disabled = false;
@@ -636,6 +740,7 @@
       console.log('Play again clicked');
       setSections({ showLogin: false, showSetup: true, showGame: false, showGameOver: false });
       els.leaderboard.classList.add('hidden');
+      els.dailyWinsLeaderboard.classList.add('hidden');
       els.name.focus();
     });
   }

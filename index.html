@@ -82,22 +82,40 @@
       </div>
     </section>
 
-    <section id="leaderboard" class="card hidden">
-      <h2>Today's Leaderboard</h2>
-      <div class="table-wrap">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Name</th>
-              <th>Score</th>
-              <th>Time</th>
-            </tr>
-          </thead>
-          <tbody id="leaderboardBody"></tbody>
-        </table>
-      </div>
-    </section>
+    <div class="leaderboards-container">
+      <section id="leaderboard" class="card hidden">
+        <h2>Today's Leaderboard</h2>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th>Score</th>
+                <th>Time</th>
+              </tr>
+            </thead>
+            <tbody id="leaderboardBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="dailyWinsLeaderboard" class="card hidden">
+        <h2>All-Time Daily Wins</h2>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th>Daily Wins</th>
+              </tr>
+            </thead>
+            <tbody id="dailyWinsLeaderboardBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
 
     <footer class="footer">
       <small>Tip: Click on an answer option to submit.</small>
