@@ -57,7 +57,6 @@
   // Check if user is already logged in
   async function checkAuth() {
     try {
-      console.log('checkAuth: Starting auth check...');
       const { data: { session }, error } = await window.supabase.auth.getSession();
       if (error) {
         console.error('Error checking auth session:', error);
@@ -65,30 +64,11 @@
       }
       
       if (session && session.user) {
-        console.log('checkAuth: Session found, setting user state...');
         gameState.user = session.user;
         gameState.isAuthenticated = true;
         console.log('User already logged in:', session.user.email);
-        
-        // Try to ensure profile and update display, but don't let failures block auth
-        try {
-          console.log('checkAuth: Ensuring profile...');
-          await ensureProfile(session.user.email.split('@')[0]);
-        } catch (profileError) {
-          console.error('Profile creation failed, but continuing:', profileError);
-        }
-        
-        try {
-          console.log('checkAuth: Updating daily wins display...');
-          await updateDailyWinsDisplay();
-        } catch (displayError) {
-          console.error('Daily wins display update failed, but continuing:', displayError);
-        }
-        
-        console.log('checkAuth: Completed successfully, returning true');
         return true;
       }
-      console.log('checkAuth: No session found, returning false');
       return false;
     } catch (error) {
       console.error('Exception in checkAuth:', error);
@@ -99,13 +79,10 @@
   // Refresh all user data and display
   async function refreshUserData() {
     if (!gameState.isAuthenticated || !gameState.user) {
-      console.log('Cannot refresh user data - not authenticated');
       return;
     }
     
     try {
-      console.log('Refreshing user data...');
-      
       // Update daily wins display
       await updateDailyWinsDisplay();
       
@@ -116,8 +93,6 @@
       if (!els.dailyWinsLeaderboard.classList.contains('hidden')) {
         await renderDailyWinsLeaderboard();
       }
-      
-      console.log('User data refreshed successfully');
     } catch (error) {
       console.error('Error refreshing user data:', error);
     }
@@ -126,7 +101,6 @@
   // Fetch user's daily wins count
   async function fetchDailyWins() {
     if (!gameState.user) {
-      console.log('No user, cannot fetch daily wins');
       return 0;
     }
 
@@ -141,9 +115,7 @@
         return 0;
       }
 
-      const wins = data ? data.length : 0;
-      console.log('Fetched daily wins:', wins, 'for user:', gameState.user.id);
-      return wins;
+      return data ? data.length : 0;
     } catch (error) {
       console.error('Exception in fetchDailyWins:', error);
       return 0;
@@ -154,22 +126,11 @@
   async function updateDailyWinsDisplay() {
     try {
       if (gameState.isAuthenticated && gameState.user) {
-        console.log('updateDailyWinsDisplay: Starting update...');
-        
-        // Add timeout to prevent hanging
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Daily wins update timeout after 5 seconds')), 5000);
-        });
-        
-        const winsPromise = fetchDailyWins();
-        const wins = await Promise.race([winsPromise, timeoutPromise]);
-        
+        const wins = await fetchDailyWins();
         els.dailyWins.textContent = wins;
         els.dailyWins.parentElement.classList.remove('hidden');
-        console.log('Daily wins display updated:', wins);
       } else {
         els.dailyWins.parentElement.classList.add('hidden');
-        console.log('Hiding daily wins display - user not authenticated');
       }
     } catch (error) {
       console.error('Error updating daily wins display:', error);
@@ -278,44 +239,26 @@
 
   // Show setup screen
   function showSetup() {
-    console.log('showSetup called');
-    console.log('Current sections state before setSections:');
-    console.log('setup hidden:', els.setup.classList.contains('hidden'));
-    console.log('loginModal hidden:', els.loginModal.classList.contains('hidden'));
-    console.log('game hidden:', els.game.classList.contains('hidden'));
-    console.log('gameOver hidden:', els.gameOver.classList.contains('hidden'));
-    
     setSections({ showLogin: false, showSetup: true, showGame: false, showGameOver: false });
-    
-    console.log('After setSections:');
-    console.log('setup hidden:', els.setup.classList.contains('hidden'));
-    console.log('loginModal hidden:', els.loginModal.classList.contains('hidden'));
-    console.log('game hidden:', els.game.classList.contains('hidden'));
-    console.log('gameOver hidden:', els.gameOver.classList.contains('hidden'));
-    
     els.name.focus();
     
     // Ensure events are bound when setup is shown
     if (!gameState.eventsBound) {
-      console.log('Binding events in showSetup');
       bindEvents();
       gameState.eventsBound = true;
     }
     
-    // Show leaderboards for logged-in users
+    // Show leaderboards for logged-in users on home page
     if (gameState.isAuthenticated) {
-      console.log('User authenticated, showing leaderboards');
       els.leaderboard.classList.remove('hidden');
       els.dailyWinsLeaderboard.classList.remove('hidden');
+      // Load leaderboards asynchronously without blocking the UI
       renderLeaderboard();
       renderDailyWinsLeaderboard();
     } else {
-      console.log('User not authenticated, hiding leaderboards');
       els.leaderboard.classList.add('hidden');
       els.dailyWinsLeaderboard.classList.add('hidden');
     }
-    
-    console.log('showSetup completed');
   }
 
   // Ensure user profile exists
@@ -326,21 +269,12 @@
       // If no display name provided, use email prefix
       const fallbackName = displayName || gameState.user.email.split('@')[0] || 'Player';
       
-      console.log('ensureProfile: Creating/updating profile for:', fallbackName);
-      
-      // Add timeout to prevent hanging
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Profile creation timeout after 5 seconds')), 5000);
-      });
-      
-      const profilePromise = window.supabase
+      const { error } = await window.supabase
         .from('users')
         .upsert({
           id: gameState.user.id,
           display_name: fallbackName,
         }, { onConflict: 'id' });
-
-      const { error } = await Promise.race([profilePromise, timeoutPromise]);
 
       if (error) {
         console.error('Error ensuring profile:', error);
@@ -355,8 +289,6 @@
         if (createError) {
           console.error('Error creating profile:', createError);
         }
-      } else {
-        console.log('ensureProfile: Profile ensured successfully');
       }
     } catch (error) {
       console.error('Exception in ensureProfile:', error);
@@ -592,24 +524,10 @@
   }
 
   function setSections({ showLogin, showSetup, showGame, showGameOver }) {
-    console.log('setSections called with:', { showLogin, showSetup, showGame, showGameOver });
-    
-    // Check if elements exist before trying to modify them
-    if (!els.loginModal) console.error('loginModal element not found');
-    if (!els.setup) console.error('setup element not found');
-    if (!els.game) console.error('game element not found');
-    if (!els.gameOver) console.error('gameOver element not found');
-    
     els.loginModal.classList.toggle('hidden', !showLogin);
     els.setup.classList.toggle('hidden', !showSetup);
     els.game.classList.toggle('hidden', !showGame);
     els.gameOver.classList.toggle('hidden', !showGameOver);
-    
-    console.log('Sections updated. Current visibility:');
-    console.log('loginModal hidden:', els.loginModal?.classList.contains('hidden'));
-    console.log('setup hidden:', els.setup?.classList.contains('hidden'));
-    console.log('game hidden:', els.game?.classList.contains('hidden'));
-    console.log('gameOver hidden:', els.gameOver?.classList.contains('hidden'));
   }
 
   function updateTimerUI(remainingMs) {
@@ -883,20 +801,12 @@
     });
     els.refreshData.addEventListener('click', refreshUserData);
     els.debugShowSetup.addEventListener('click', () => {
-      console.log('Debug button clicked - forcing setup display');
-      console.log('Current game state:', gameState);
-      console.log('Current section visibility:');
-      console.log('setup hidden:', els.setup.classList.contains('hidden'));
-      console.log('loginModal hidden:', els.loginModal.classList.contains('hidden'));
-      console.log('game hidden:', els.game.classList.contains('hidden'));
-      console.log('gameOver hidden:', els.gameOver.classList.contains('hidden'));
+      console.log('Debug: Forcing setup display...');
       
       // Method 1: Try setSections
-      console.log('Trying setSections method...');
       setSections({ showLogin: false, showSetup: true, showGame: false, showGameOver: false });
       
       // Method 2: Direct DOM manipulation
-      console.log('Trying direct DOM manipulation...');
       els.setup.classList.remove('hidden');
       els.loginModal.classList.add('hidden');
       els.game.classList.add('hidden');
@@ -905,20 +815,7 @@
       // Method 3: Force focus on name input
       if (els.name) {
         els.name.focus();
-        console.log('Name input focused');
-      } else {
-        console.error('Name input not found!');
       }
-      
-      // Method 4: Check if setup is now visible
-      setTimeout(() => {
-        console.log('After debug actions - setup hidden:', els.setup.classList.contains('hidden'));
-        if (!els.setup.classList.contains('hidden')) {
-          console.log('SUCCESS: Setup screen should now be visible!');
-        } else {
-          console.error('FAILED: Setup screen is still hidden after all attempts');
-        }
-      }, 100);
       
       console.log('Setup should now be visible');
     });
@@ -929,12 +826,6 @@
       console.log('Initializing game...');
       
       // Check if all required elements are found
-      console.log('Checking DOM elements:');
-      console.log('setup element:', els.setup);
-      console.log('loginModal element:', els.loginModal);
-      console.log('game element:', els.game);
-      console.log('gameOver element:', els.gameOver);
-      
       if (!els.setup || !els.loginModal || !els.game || !els.gameOver) {
         console.error('Some required DOM elements are missing!');
         return;
@@ -942,16 +833,14 @@
       
       // Check if user is already logged in
       const isLoggedIn = await checkAuth();
-      console.log('Auth check result:', isLoggedIn);
       
       if (isLoggedIn) {
         // User is logged in, show setup directly
         console.log('User is logged in, showing setup');
         try {
           await showSetup();
-          console.log('showSetup completed successfully');
         } catch (setupError) {
-          console.error('Error in showSetup, trying fallback:', setupError);
+          console.error('Error in showSetup, using fallback:', setupError);
           // Fallback: manually show setup
           setSections({ showLogin: false, showSetup: true, showGame: false, showGameOver: false });
           els.name.focus();
@@ -976,48 +865,18 @@
 
   // Listen for auth state changes
   window.supabase.auth.onAuthStateChange(async (event, session) => {
-    console.log('Auth state change:', event, session?.user?.email);
-    
     if (event === 'SIGNED_IN' && session) {
       gameState.user = session.user;
       gameState.isAuthenticated = true;
       console.log('User signed in:', session.user.email);
       hideLoginModal();
-      
-      // Ensure profile and update display
-      await ensureProfile();
-      await updateDailyWinsDisplay();
-      
-      // Only show setup if we're not already on it
-      if (els.setup.classList.contains('hidden')) {
-        console.log('About to call showSetup from auth listener...');
-        showSetup();
-      } else {
-        console.log('Setup already visible, not calling showSetup again');
-      }
+      showSetup();
       
     } else if (event === 'SIGNED_OUT') {
       gameState.user = null;
       gameState.isAuthenticated = false;
       console.log('User signed out');
-      await updateDailyWinsDisplay();
-      
-      // Show login modal when signed out
       showLoginModal();
-    } else if (event === 'TOKEN_REFRESHED' && session) {
-      // Handle token refresh (important for page reloads)
-      console.log('Token refreshed for user:', session.user.email);
-      gameState.user = session.user;
-      gameState.isAuthenticated = true;
-      
-      // Update display after token refresh
-      await updateDailyWinsDisplay();
-      
-      // If we're on the setup screen, refresh leaderboards
-      if (!els.setup.classList.contains('hidden')) {
-        await renderLeaderboard();
-        await renderDailyWinsLeaderboard();
-      }
     }
   });
 
