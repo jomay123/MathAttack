@@ -28,6 +28,11 @@
   --capital-accent: #7c3aed;
   --capital-hover: #9333ea;
   
+  /* Football Badge Attack theme (orange) */
+  --football-primary: #f97316;
+  --football-accent: #ea580c;
+  --football-hover: #dc2626;
+  
   /* Main theme (green) */
   --main-primary: #22c55e;
   --main-accent: #16a34a;
@@ -435,7 +440,7 @@ body:not(.math-theme):not(.geo-theme) {
 /* Game selection */
 .game-selection {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 20px;
   margin-bottom: 24px;
 }
@@ -560,6 +565,16 @@ body:not(.math-theme):not(.geo-theme) {
   border-color: var(--capital-hover);
 }
 
+.btn.football-theme {
+  background: var(--football-primary);
+  border-color: var(--football-primary);
+}
+
+.btn.football-theme:hover {
+  background: var(--football-hover);
+  border-color: var(--football-hover);
+}
+
 /* Game-specific leaderboard themes */
 #mathLeaderboard .leaderboard-header h2 {
   color: var(--math-primary);
@@ -571,4 +586,8 @@ body:not(.math-theme):not(.geo-theme) {
 
 #capitalsLeaderboard .leaderboard-header h2 {
   color: var(--capital-primary);
+}
+
+#logosLeaderboard .leaderboard-header h2 {
+  color: var(--football-primary);
 } 

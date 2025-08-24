@@ -71,6 +71,11 @@
           <p>Guess the capital cities of countries. Challenge your world knowledge!</p>
           <button class="btn primary capital-theme">Play Capital Attack</button>
         </div>
+        <div class="game-option" data-game="logos">
+          <h3>Football Badge Attack</h3>
+          <p>Identify soccer team badges from around the world. Test your football knowledge!</p>
+          <button class="btn primary football-theme">Play Football Badge Attack</button>
+        </div>
       </div>
       <div class="setup-row hidden" id="gameSetup">
         <label for="playerName" class="label">Display Name</label>
@@ -161,6 +166,26 @@
               </tr>
             </thead>
             <tbody id="capitalsLeaderboardBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="logosLeaderboard" class="card hidden">
+        <div class="leaderboard-header">
+          <h2>Football Badge Attack - Today's Scores</h2>
+          <button id="refreshLogosLeaderboard" class="btn secondary small">Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th>Score</th>
+                <th>Time</th>
+              </tr>
+            </thead>
+            <tbody id="logosLeaderboardBody"></tbody>
           </table>
         </div>
       </section>

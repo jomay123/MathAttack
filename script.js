@@ -41,11 +41,14 @@
     flagsLeaderboardBody: document.getElementById('flagsLeaderboardBody'),
     capitalsLeaderboard: document.getElementById('capitalsLeaderboard'),
     capitalsLeaderboardBody: document.getElementById('capitalsLeaderboardBody'),
+    logosLeaderboard: document.getElementById('logosLeaderboard'),
+    logosLeaderboardBody: document.getElementById('logosLeaderboardBody'),
     dailyWinsLeaderboard: document.getElementById('dailyWinsLeaderboard'),
     dailyWinsLeaderboardBody: document.getElementById('dailyWinsLeaderboardBody'),
     refreshMathLeaderboard: document.getElementById('refreshMathLeaderboard'),
     refreshFlagsLeaderboard: document.getElementById('refreshFlagsLeaderboard'),
     refreshCapitalsLeaderboard: document.getElementById('refreshCapitalsLeaderboard'),
+    refreshLogosLeaderboard: document.getElementById('refreshLogosLeaderboard'),
     refreshDailyWins: document.getElementById('refreshDailyWins')
   };
 
@@ -229,6 +232,7 @@
   // Handle game selection
   function selectGame(gameType) {
     console.log('Game selected:', gameType);
+    console.log('Current game state:', gameState);
     gameState.currentGame = gameType;
     
     // Hide game selection, show game setup
@@ -243,8 +247,11 @@
       hint.textContent = 'Identify as many country flags as you can. You have 10 seconds per question. Faster answers earn more points. One wrong answer or a timeout ends the game.';
     } else if (gameType === 'capitals') {
       hint.textContent = 'Guess as many capital cities as you can. You have 10 seconds per question. Faster answers earn more points. One wrong answer or a timeout ends the game.';
+    } else if (gameType === 'logos') {
+      hint.textContent = 'Identify as many soccer team badges as you can. You have 10 seconds per question. Faster answers earn more points. One wrong answer or a timeout ends the game.';
     }
     
+    console.log('Hint text updated, focusing on name input');
     // Focus on name input
     els.name.focus();
   }
@@ -269,16 +276,19 @@
       els.mathLeaderboard.classList.remove('hidden');
       els.flagsLeaderboard.classList.remove('hidden');
       els.capitalsLeaderboard.classList.remove('hidden');
+      els.logosLeaderboard.classList.remove('hidden');
       els.dailyWinsLeaderboard.classList.remove('hidden');
       // Load leaderboards asynchronously without blocking the UI
       renderLeaderboard('math');
       renderLeaderboard('flags');
       renderLeaderboard('capitals');
+      renderLeaderboard('logos');
       renderDailyWinsLeaderboard();
     } else {
       els.mathLeaderboard.classList.add('hidden');
       els.flagsLeaderboard.classList.add('hidden');
       els.capitalsLeaderboard.classList.add('hidden');
+      els.logosLeaderboard.classList.add('hidden');
       els.dailyWinsLeaderboard.classList.add('hidden');
     }
   }
@@ -496,6 +506,8 @@
         tbody = els.flagsLeaderboardBody;
       } else if (gameType === 'capitals') {
         tbody = els.capitalsLeaderboardBody;
+      } else if (gameType === 'logos') {
+        tbody = els.logosLeaderboardBody;
       } else {
         return;
       }
@@ -1283,6 +1295,8 @@
       showFlagQuestion();
     } else if (gameState.currentGame === 'capitals') {
       showCapitalQuestion();
+    } else if (gameState.currentGame === 'logos') {
+      showFootballBadgeQuestion();
     }
   }
 
@@ -1322,10 +1336,24 @@
       } else {
         endGame('wrong');
       }
+    } else if (gameState.currentGame === 'logos') {
+      // Football badge game logic
+      if (userAnswer === gameState.correctAnswer) {
+        const remaining = Math.max(0, gameState.deadlineTs - now());
+        const earned = computePoints(remaining);
+        gameState.score += earned;
+        updateScoreUI();
+        showFootballBadgeQuestion();
+      } else {
+        endGame('wrong');
+      }
     }
   }
 
   function startGame() {
+    console.log('startGame called');
+    console.log('Current game:', gameState.currentGame);
+    
     if (!gameState.currentGame) {
       console.error('No game selected');
       return;
@@ -1333,6 +1361,7 @@
     
     const rawName = (els.name.value || '').trim();
     gameState.playerName = rawName || 'Player';
+    console.log('Player name:', gameState.playerName);
     
     if (gameState.isAuthenticated) {
       ensureProfile(gameState.playerName);
@@ -1344,15 +1373,25 @@
     setSections({ showLogin: false, showSetup: false, showGame: true, showGameOver: false });
     els.mathLeaderboard.classList.add('hidden');
     els.flagsLeaderboard.classList.add('hidden');
+    els.capitalsLeaderboard.classList.add('hidden');
+    els.logosLeaderboard.classList.add('hidden');
     els.dailyWinsLeaderboard.classList.add('hidden');
+    
+    console.log('About to show question for game type:', gameState.currentGame);
     
     // Show appropriate question based on game type
     if (gameState.currentGame === 'math') {
+      console.log('Showing math question');
       showMathQuestion();
     } else if (gameState.currentGame === 'flags') {
+      console.log('Showing flag question');
       showFlagQuestion();
     } else if (gameState.currentGame === 'capitals') {
+      console.log('Showing capital question');
       showCapitalQuestion();
+    } else if (gameState.currentGame === 'logos') {
+      console.log('Showing football badge question');
+      showFootballBadgeQuestion();
     }
   }
 
@@ -1377,6 +1416,11 @@
       els.mathLeaderboard.classList.add('hidden');
       els.flagsLeaderboard.classList.add('hidden');
       renderLeaderboard('capitals');
+    } else if (gameState.currentGame === 'logos') {
+      els.logosLeaderboard.classList.remove('hidden');
+      els.mathLeaderboard.classList.add('hidden');
+      els.flagsLeaderboard.classList.add('hidden');
+      renderLeaderboard('logos');
     }
     
     els.dailyWinsLeaderboard.classList.remove('hidden');
@@ -1424,6 +1468,8 @@
           await renderLeaderboard('flags');
         } else if (gameState.currentGame === 'capitals') {
           await renderLeaderboard('capitals');
+        } else if (gameState.currentGame === 'logos') {
+          await renderLeaderboard('logos');
         }
         await renderDailyWinsLeaderboard();
       } else {
@@ -1455,6 +1501,7 @@
     document.querySelector('[data-game="math"] button').addEventListener('click', () => selectGame('math'));
     document.querySelector('[data-game="flags"] button').addEventListener('click', () => selectGame('flags'));
     document.querySelector('[data-game="capitals"] button').addEventListener('click', () => selectGame('capitals'));
+    document.querySelector('[data-game="logos"] button').addEventListener('click', () => selectGame('logos'));
 
     // Game events
     els.start.addEventListener('click', startGame);
@@ -1465,6 +1512,7 @@
       els.mathLeaderboard.classList.add('hidden');
       els.flagsLeaderboard.classList.add('hidden');
       els.capitalsLeaderboard.classList.add('hidden');
+      els.logosLeaderboard.classList.add('hidden');
       els.dailyWinsLeaderboard.classList.add('hidden');
       document.body.className = ''; // Reset theme
       els.name.focus();
@@ -1475,6 +1523,7 @@
       els.mathLeaderboard.classList.add('hidden');
       els.flagsLeaderboard.classList.add('hidden');
       els.capitalsLeaderboard.classList.add('hidden');
+      els.logosLeaderboard.classList.add('hidden');
       els.dailyWinsLeaderboard.classList.add('hidden');
       // Reset game selection to show both options
       document.querySelector('.game-selection').classList.remove('hidden');
@@ -1487,49 +1536,34 @@
     els.refreshMathLeaderboard.addEventListener('click', () => renderLeaderboard('math'));
     els.refreshFlagsLeaderboard.addEventListener('click', () => renderLeaderboard('flags'));
     els.refreshCapitalsLeaderboard.addEventListener('click', () => renderLeaderboard('capitals'));
+    els.refreshLogosLeaderboard.addEventListener('click', () => renderLeaderboard('logos'));
     els.refreshDailyWins.addEventListener('click', renderDailyWinsLeaderboard);
   }
 
+  // Initialize the game
   async function init() {
-    try {
-      console.log('Initializing game...');
-      
-      // Check if all required elements are found
-      if (!els.setup || !els.loginModal || !els.game || !els.gameOver) {
-        console.error('Some required DOM elements are missing!');
-        return;
-      }
-      
-      // Check if user is already logged in
-      const isLoggedIn = await checkAuth();
-      
-      if (isLoggedIn) {
-        // User is logged in, show setup directly
-        console.log('User is logged in, showing setup');
-        try {
-          await showSetup();
-        } catch (setupError) {
-          console.error('Error in showSetup, using fallback:', setupError);
-          // Fallback: manually show setup
-          setSections({ showLogin: false, showSetup: true, showGame: false, showGameOver: false });
-          els.name.focus();
-        }
-      } else {
-        // Show login modal
-        console.log('User not logged in, showing login modal');
-        showLoginModal();
-        bindEvents();
-        gameState.eventsBound = true;
-      }
-      
-      console.log('Game initialized');
-    } catch (error) {
-      console.error('Error during initialization:', error);
-      // Fallback to login modal
+    console.log('Game initializing...');
+    
+    // Build the badge database first
+    await buildBadgeDatabase();
+    
+    // Check authentication state
+    const isLoggedIn = await checkAuth();
+    console.log('Auth check result:', isLoggedIn);
+    
+    // Bind event listeners
+    bindEvents();
+    
+    // Show appropriate screen based on auth state
+    if (isLoggedIn) {
+      console.log('User is logged in, showing setup');
+      showSetup();
+    } else {
+      console.log('User not logged in, showing login modal');
       showLoginModal();
-      bindEvents();
-      gameState.eventsBound = true;
     }
+    
+    console.log('Game initialized');
   }
 
   // Listen for auth state changes
@@ -1550,4 +1584,268 @@
   });
 
   document.addEventListener('DOMContentLoaded', init);
+
+  // Global badge database - will be populated automatically
+  let globalBadgeDatabase = [];
+  
+  // Function to scan and build badge database from Logos folder
+  async function buildBadgeDatabase() {
+    console.log('buildBadgeDatabase called');
+    try {
+      // Try to fetch a list of all available badges
+      console.log('Attempting to fetch badge-list.json...');
+      const response = await fetch('Logos/badge-list.json');
+      console.log('Response status:', response.status);
+      console.log('Response ok:', response.ok);
+      
+      if (response.ok) {
+        const badgeList = await response.json();
+        console.log('Parsed JSON response:', badgeList);
+        
+        const allBadges = badgeList.badges || badgeList;
+        console.log(`Loaded ${allBadges.length} total badges from database`);
+        
+        // Filter to only include the 5 major leagues the user wants
+        const majorLeagues = [
+          'England - Premier League',
+          'France - Ligue 1', 
+          'Germany - Bundesliga',
+          'Italy - Serie A',
+          'Spain - LaLiga'
+        ];
+        
+        globalBadgeDatabase = allBadges.filter(badge => 
+          majorLeagues.includes(badge.league)
+        );
+        
+        console.log(`Filtered to ${globalBadgeDatabase.length} badges from major leagues`);
+        console.log('Leagues included:', [...new Set(globalBadgeDatabase.map(b => b.league))]);
+        
+        // Show a few examples of loaded badges
+        console.log('Sample badges loaded:', globalBadgeDatabase.slice(0, 3));
+        
+        return;
+      } else {
+        console.log('badge-list.json not found or not accessible, using fallback list');
+        console.log('Response status:', response.status);
+        console.log('Response status text:', response.statusText);
+      }
+    } catch (error) {
+      console.log('Could not load badge database, using fallback list:', error);
+      console.log('Error details:', error.message);
+    }
+    
+    // Fallback: Use a comprehensive list of teams from the 5 major leagues
+    console.log('Setting up fallback database with all teams from major leagues...');
+    globalBadgeDatabase = [
+      // England - Premier League (20 teams)
+      { team: 'Arsenal', badgeUrl: 'Logos/England - Premier League/Arsenal FC.png' },
+      { team: 'Aston Villa', badgeUrl: 'Logos/England - Premier League/Aston Villa.png' },
+      { team: 'AFC Bournemouth', badgeUrl: 'Logos/England - Premier League/AFC Bournemouth.png' },
+      { team: 'Brentford', badgeUrl: 'Logos/England - Premier League/Brentford FC.png' },
+      { team: 'Brighton & Hove Albion', badgeUrl: 'Logos/England - Premier League/Brighton & Hove Albion.png' },
+      { team: 'Burnley', badgeUrl: 'Logos/England - Premier League/Burnley FC.png' },
+      { team: 'Chelsea', badgeUrl: 'Logos/England - Premier League/Chelsea FC.png' },
+      { team: 'Crystal Palace', badgeUrl: 'Logos/England - Premier League/Crystal Palace.png' },
+      { team: 'Everton', badgeUrl: 'Logos/England - Premier League/Everton FC.png' },
+      { team: 'Fulham', badgeUrl: 'Logos/England - Premier League/Fulham FC.png' },
+      { team: 'Leeds United', badgeUrl: 'Logos/England - Premier League/Leeds United.png' },
+      { team: 'Liverpool', badgeUrl: 'Logos/England - Premier League/Liverpool FC.png' },
+      { team: 'Manchester City', badgeUrl: 'Logos/England - Premier League/Manchester City.png' },
+      { team: 'Manchester United', badgeUrl: 'Logos/England - Premier League/Manchester United.png' },
+      { team: 'Newcastle United', badgeUrl: 'Logos/England - Premier League/Newcastle United.png' },
+      { team: 'Nottingham Forest', badgeUrl: 'Logos/England - Premier League/Nottingham Forest.png' },
+      { team: 'Sunderland', badgeUrl: 'Logos/England - Premier League/Sunderland AFC.png' },
+      { team: 'Tottenham Hotspur', badgeUrl: 'Logos/England - Premier League/Tottenham Hotspur.png' },
+      { team: 'West Ham United', badgeUrl: 'Logos/England - Premier League/West Ham United.png' },
+      { team: 'Wolverhampton Wanderers', badgeUrl: 'Logos/England - Premier League/Wolverhampton Wanderers.png' },
+      
+      // France - Ligue 1 (18 teams)
+      { team: 'AJ Auxerre', badgeUrl: 'Logos/France - Ligue 1/AJ Auxerre.png' },
+      { team: 'Angers SCO', badgeUrl: 'Logos/France - Ligue 1/Angers SCO.png' },
+      { team: 'AS Monaco', badgeUrl: 'Logos/France - Ligue 1/AS Monaco.png' },
+      { team: 'FC Lorient', badgeUrl: 'Logos/France - Ligue 1/FC Lorient.png' },
+      { team: 'FC Metz', badgeUrl: 'Logos/France - Ligue 1/FC Metz.png' },
+      { team: 'FC Nantes', badgeUrl: 'Logos/France - Ligue 1/FC Nantes.png' },
+      { team: 'FC Toulouse', badgeUrl: 'Logos/France - Ligue 1/FC Toulouse.png' },
+      { team: 'Le Havre AC', badgeUrl: 'Logos/France - Ligue 1/Le Havre AC.png' },
+      { team: 'LOSC Lille', badgeUrl: 'Logos/France - Ligue 1/LOSC Lille.png' },
+      { team: 'OGC Nice', badgeUrl: 'Logos/France - Ligue 1/OGC Nice.png' },
+      { team: 'Olympique Lyon', badgeUrl: 'Logos/France - Ligue 1/Olympique Lyon.png' },
+      { team: 'Olympique Marseille', badgeUrl: 'Logos/France - Ligue 1/Olympique Marseille.png' },
+      { team: 'Paris FC', badgeUrl: 'Logos/France - Ligue 1/Paris FC.png' },
+      { team: 'Paris Saint-Germain', badgeUrl: 'Logos/France - Ligue 1/Paris Saint-Germain.png' },
+      { team: 'RC Lens', badgeUrl: 'Logos/France - Ligue 1/RC Lens.png' },
+      { team: 'RC Strasbourg Alsace', badgeUrl: 'Logos/France - Ligue 1/RC Strasbourg Alsace.png' },
+      { team: 'Stade Brestois 29', badgeUrl: 'Logos/France - Ligue 1/Stade Brestois 29.png' },
+      { team: 'Stade Rennais', badgeUrl: 'Logos/France - Ligue 1/Stade Rennais FC.png' },
+      
+      // Germany - Bundesliga (18 teams)
+      { team: '1.FC Heidenheim 1846', badgeUrl: 'Logos/Germany - Bundesliga/1.FC Heidenheim 1846.png' },
+      { team: '1.FC Koln', badgeUrl: 'Logos/Germany - Bundesliga/1.FC Koln.png' },
+      { team: '1.FC Union Berlin', badgeUrl: 'Logos/Germany - Bundesliga/1.FC Union Berlin.png' },
+      { team: 'Bayer 04 Leverkusen', badgeUrl: 'Logos/Germany - Bundesliga/Bayer 04 Leverkusen.png' },
+      { team: 'Bayern Munich', badgeUrl: 'Logos/Germany - Bundesliga/Bayern Munich.png' },
+      { team: 'Borussia Dortmund', badgeUrl: 'Logos/Germany - Bundesliga/Borussia Dortmund.png' },
+      { team: 'Borussia Monchengladbach', badgeUrl: 'Logos/Germany - Bundesliga/Borussia Monchengladbach.png' },
+      { team: 'Eintracht Frankfurt', badgeUrl: 'Logos/Germany - Bundesliga/Eintracht Frankfurt.png' },
+      { team: 'FC Augsburg', badgeUrl: 'Logos/Germany - Bundesliga/FC Augsburg.png' },
+      { team: 'FC St. Pauli', badgeUrl: 'Logos/Germany - Bundesliga/FC St. Pauli.png' },
+      { team: 'Hamburger SV', badgeUrl: 'Logos/Germany - Bundesliga/Hamburger SV.png' },
+      { team: 'RB Leipzig', badgeUrl: 'Logos/Germany - Bundesliga/RB Leipzig.png' },
+      { team: 'SC Freiburg', badgeUrl: 'Logos/Germany - Bundesliga/SC Freiburg.png' },
+      { team: 'SV Werder Bremen', badgeUrl: 'Logos/Germany - Bundesliga/SV Werder Bremen.png' },
+      { team: 'TSG 1899 Hoffenheim', badgeUrl: 'Logos/Germany - Bundesliga/TSG 1899 Hoffenheim.png' },
+      { team: 'VfB Stuttgart', badgeUrl: 'Logos/Germany - Bundesliga/VfB Stuttgart.png' },
+      { team: 'VfL Wolfsburg', badgeUrl: 'Logos/Germany - Bundesliga/VfL Wolfsburg.png' },
+      { team: '1.FSV Mainz 05', badgeUrl: 'Logos/Germany - Bundesliga/1.FSV Mainz 05.png' },
+      
+      // Italy - Serie A (20 teams)
+      { team: 'AC Milan', badgeUrl: 'Logos/Italy - Serie A/AC Milan.png' },
+      { team: 'ACF Fiorentina', badgeUrl: 'Logos/Italy - Serie A/ACF Fiorentina.png' },
+      { team: 'AS Roma', badgeUrl: 'Logos/Italy - Serie A/AS Roma.png' },
+      { team: 'Atalanta BC', badgeUrl: 'Logos/Italy - Serie A/Atalanta BC.png' },
+      { team: 'Bologna FC 1909', badgeUrl: 'Logos/Italy - Serie A/Bologna FC 1909.png' },
+      { team: 'Cagliari Calcio', badgeUrl: 'Logos/Italy - Serie A/Cagliari Calcio.png' },
+      { team: 'Como 1907', badgeUrl: 'Logos/Italy - Serie A/Como 1907.png' },
+      { team: 'Genoa CFC', badgeUrl: 'Logos/Italy - Serie A/Genoa CFC.png' },
+      { team: 'Hellas Verona', badgeUrl: 'Logos/Italy - Serie A/Hellas Verona.png' },
+      { team: 'Inter Milan', badgeUrl: 'Logos/Italy - Serie A/Inter Milan.png' },
+      { team: 'Juventus', badgeUrl: 'Logos/Italy - Serie A/Juventus FC.png' },
+      { team: 'Parma Calcio 1913', badgeUrl: 'Logos/Italy - Serie A/Parma Calcio 1913.png' },
+      { team: 'Pisa Sporting Club', badgeUrl: 'Logos/Italy - Serie A/Pisa Sporting Club.png' },
+      { team: 'SSC Napoli', badgeUrl: 'Logos/Italy - Serie A/SSC Napoli.png' },
+      { team: 'SS Lazio', badgeUrl: 'Logos/Italy - Serie A/SS Lazio.png' },
+      { team: 'Torino', badgeUrl: 'Logos/Italy - Serie A/Torino FC.png' },
+      { team: 'US Cremonese', badgeUrl: 'Logos/Italy - Serie A/US Cremonese.png' },
+      { team: 'US Lecce', badgeUrl: 'Logos/Italy - Serie A/US Lecce.png' },
+      { team: 'US Sassuolo', badgeUrl: 'Logos/Italy - Serie A/US Sassuolo.png' },
+      { team: 'Udinese Calcio', badgeUrl: 'Logos/Italy - Serie A/Udinese Calcio.png' },
+      
+      // Spain - LaLiga (20 teams)
+      { team: 'Athletic Bilbao', badgeUrl: 'Logos/Spain - LaLiga/Athletic Bilbao.png' },
+      { team: 'Atletico Madrid', badgeUrl: 'Logos/Spain - LaLiga/Atletico de Madrid.png' },
+      { team: 'Barcelona', badgeUrl: 'Logos/Spain - LaLiga/FC Barcelona.png' },
+      { team: 'Celta de Vigo', badgeUrl: 'Logos/Spain - LaLiga/Celta de Vigo.png' },
+      { team: 'Deportivo Alaves', badgeUrl: 'Logos/Spain - LaLiga/Deportivo Alaves.png' },
+      { team: 'Elche CF', badgeUrl: 'Logos/Spain - LaLiga/Elche CF.png' },
+      { team: 'FC Barcelona', badgeUrl: 'Logos/Spain - LaLiga/FC Barcelona.png' },
+      { team: 'Girona', badgeUrl: 'Logos/Spain - LaLiga/Girona FC.png' },
+      { team: 'Getafe CF', badgeUrl: 'Logos/Spain - LaLiga/Getafe CF.png' },
+      { team: 'Levante UD', badgeUrl: 'Logos/Spain - LaLiga/Levante UD.png' },
+      { team: 'RCD Espanyol Barcelona', badgeUrl: 'Logos/Spain - LaLiga/RCD Espanyol Barcelona.png' },
+      { team: 'RCD Mallorca', badgeUrl: 'Logos/Spain - LaLiga/RCD Mallorca.png' },
+      { team: 'Rayo Vallecano', badgeUrl: 'Logos/Spain - LaLiga/Rayo Vallecano.png' },
+      { team: 'Real Betis Balompie', badgeUrl: 'Logos/Spain - LaLiga/Real Betis Balompie.png' },
+      { team: 'Real Madrid', badgeUrl: 'Logos/Spain - LaLiga/Real Madrid.png' },
+      { team: 'Real Oviedo', badgeUrl: 'Logos/Spain - LaLiga/Real Oviedo.png' },
+      { team: 'Real Sociedad', badgeUrl: 'Logos/Spain - LaLiga/Real Sociedad.png' },
+      { team: 'Sevilla', badgeUrl: 'Logos/Spain - LaLiga/Sevilla FC.png' },
+      { team: 'Valencia CF', badgeUrl: 'Logos/Spain - LaLiga/Valencia CF.png' },
+      { team: 'Villarreal CF', badgeUrl: 'Logos/Spain - LaLiga/Villarreal CF.png' }
+    ];
+    
+    console.log(`Using fallback database with ${globalBadgeDatabase.length} badges from major leagues`);
+  }
+
+  // Generate football badge question
+  function generateFootballBadgeQuestion(score) {
+    // Use the global database
+    if (globalBadgeDatabase.length === 0) {
+      console.error('No badges available in database');
+      return null;
+    }
+    
+    const correctBadge = pickFrom(globalBadgeDatabase);
+    const correctAnswer = correctBadge.team;
+    
+    // Generate wrong answers from other teams
+    const wrongTeams = globalBadgeDatabase.filter(b => b.team !== correctAnswer).map(b => b.team);
+    const wrongAnswers = [];
+    
+    for (let i = 0; i < 3; i++) {
+      if (wrongTeams.length > 0) {
+        const randomIndex = Math.floor(Math.random() * wrongTeams.length);
+        wrongAnswers.push(wrongTeams.splice(randomIndex, 1)[0]);
+      }
+    }
+    
+    const allOptions = [...wrongAnswers, correctAnswer];
+    
+    // Shuffle options
+    for (let i = allOptions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [allOptions[j], allOptions[i]] = [allOptions[i], allOptions[j]];
+    }
+    
+    return {
+      badgeUrl: correctBadge.badgeUrl,
+      answer: correctAnswer,
+      options: allOptions
+    };
+  }
+
+  // Show football badge question
+  function showFootballBadgeQuestion() {
+    console.log('showFootballBadgeQuestion called');
+    console.log('globalBadgeDatabase length:', globalBadgeDatabase.length);
+    
+    const q = generateFootballBadgeQuestion(gameState.score);
+    console.log('Generated question:', q);
+    
+    if (!q) {
+      console.error('Failed to generate football badge question');
+      return;
+    }
+    
+    gameState.correctAnswer = q.answer;
+    console.log('Correct answer set to:', gameState.correctAnswer);
+    
+    const existingOptions = document.querySelectorAll('.option');
+    existingOptions.forEach(opt => opt.remove());
+    
+    // Clear previous question text and add badge image
+    els.questionText.innerHTML = '';
+    
+    const badgeImg = document.createElement('img');
+    badgeImg.src = q.badgeUrl;
+    badgeImg.alt = 'Soccer team badge';
+    badgeImg.style.width = '200px';
+    badgeImg.style.height = 'auto';
+    badgeImg.style.marginBottom = '16px';
+    badgeImg.style.border = '2px solid rgba(249, 115, 22, 0.3)';
+    badgeImg.style.borderRadius = '8px';
+    badgeImg.style.backgroundColor = 'white';
+    badgeImg.style.padding = '16px';
+    
+    // Add error handling for image loading
+    badgeImg.onerror = function() {
+      console.error('Failed to load image:', q.badgeUrl);
+      // Show a placeholder or error message
+      els.questionText.innerHTML = '<p style="color: red;">Failed to load badge image</p>';
+    };
+    
+    badgeImg.onload = function() {
+      console.log('Badge image loaded successfully:', q.badgeUrl);
+    };
+    
+    els.questionText.appendChild(badgeImg);
+    
+    const optionsContainer = document.createElement('div');
+    optionsContainer.className = 'options';
+    optionsContainer.style.marginTop = '16px';
+    
+    q.options.forEach((option) => {
+      const optionBtn = document.createElement('button');
+      optionBtn.className = 'btn option football-theme';
+      optionBtn.textContent = option;
+      optionBtn.dataset.value = option;
+      optionBtn.addEventListener('click', () => handleOptionClick(option));
+      optionsContainer.appendChild(optionBtn);
+    });
+    
+    els.questionText.parentNode.insertBefore(optionsContainer, els.questionText.nextSibling);
+    console.log('Options created, starting timer');
+    startTimer();
+  }
 })(); 
