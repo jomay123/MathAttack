@@ -22,16 +22,13 @@
   <div class="container">
     <header class="header">
       <div class="brand">
-        <img src="logo.svg" alt="Math Attack logo" class="logo" onerror="this.style.display='none'">
-        <h1 class="title">Math Attack</h1>
+        <div class="logo">🎯</div>
+        <h1 class="title">Trivia Attack</h1>
       </div>
       <div class="stats">
         <div class="stat"><span id="score">0</span> Score</div>
         <div class="stat timer"><span id="time">10.0</span>s</div>
         <div class="stat daily-wins hidden"><span id="dailyWins">0</span> Daily Wins</div>
-      </div>
-      <div class="debug-controls">
-        <button id="debugShowSetup" class="btn secondary" style="font-size: 12px; padding: 4px 8px;">Debug: Show Setup</button>
       </div>
     </header>
 
@@ -57,14 +54,28 @@
     </div>
 
     <section id="setup" class="card hidden">
-      <h2>Get Ready</h2>
-      <div class="setup-row">
+      <h2>Choose Your Game</h2>
+      <div class="game-selection">
+        <div class="game-option" data-game="math">
+          <h3>Math Attack</h3>
+          <p>Solve math problems against the clock. Faster answers earn more points!</p>
+          <button class="btn primary math-theme">Play Math Attack</button>
+        </div>
+        <div class="game-option" data-game="flags">
+          <h3>Flag Attack</h3>
+          <p>Identify countries from their flags. Test your geography knowledge!</p>
+          <button class="btn primary flag-theme">Play Flag Attack</button>
+        </div>
+        <div class="game-option" data-game="capitals">
+          <h3>Capital Attack</h3>
+          <p>Guess the capital cities of countries. Challenge your world knowledge!</p>
+          <button class="btn primary capital-theme">Play Capital Attack</button>
+        </div>
+      </div>
+      <div class="setup-row hidden" id="gameSetup">
         <label for="playerName" class="label">Display Name</label>
         <input id="playerName" class="input" type="text" maxlength="20" placeholder="Enter your display name" autocomplete="name">
         <button id="startBtn" class="btn primary">Start Game</button>
-      </div>
-      <div class="setup-actions">
-        <button id="refreshData" class="btn secondary">Refresh Data</button>
       </div>
       <p class="hint">Answer as many questions as you can. You have 10 seconds per question. Faster answers earn more points. One wrong answer or a timeout ends the game.</p>
     </section>
@@ -76,6 +87,10 @@
           <div id="timeBar" class="progress-bar"></div>
         </div>
       </div>
+      <div class="game-stats">
+        <div class="stat">Score: <span id="gameScore">0</span></div>
+        <div class="stat timer">Time: <span id="gameTime">10.0</span>s</div>
+      </div>
       <!-- Multiple choice options will be dynamically inserted here -->
     </section>
 
@@ -85,12 +100,16 @@
       <div class="actions">
         <button id="submitScore" class="btn primary">Submit Score</button>
         <button id="playAgain" class="btn">Play Again</button>
+        <button id="backToHome" class="btn secondary">Back to Home</button>
       </div>
     </section>
 
     <div class="leaderboards-container">
-      <section id="leaderboard" class="card hidden">
-        <h2>Today's Leaderboard</h2>
+      <section id="mathLeaderboard" class="card hidden">
+        <div class="leaderboard-header">
+          <h2>Math Attack - Today's Scores</h2>
+          <button id="refreshMathLeaderboard" class="btn secondary small">Refresh</button>
+        </div>
         <div class="table-wrap">
           <table class="table">
             <thead>
@@ -101,13 +120,58 @@
                 <th>Time</th>
               </tr>
             </thead>
-            <tbody id="leaderboardBody"></tbody>
+            <tbody id="mathLeaderboardBody"></tbody>
           </table>
         </div>
       </section>
 
+      <section id="flagsLeaderboard" class="card hidden">
+        <div class="leaderboard-header">
+          <h2>Flag Attack - Today's Scores</h2>
+          <button id="refreshFlagsLeaderboard" class="btn secondary small">Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th>Score</th>
+                <th>Time</th>
+              </tr>
+            </thead>
+            <tbody id="flagsLeaderboardBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="capitalsLeaderboard" class="card hidden">
+        <div class="leaderboard-header">
+          <h2>Capital Attack - Today's Scores</h2>
+          <button id="refreshCapitalsLeaderboard" class="btn secondary small">Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th>Score</th>
+                <th>Time</th>
+              </tr>
+            </thead>
+            <tbody id="capitalsLeaderboardBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <div class="daily-wins-container">
       <section id="dailyWinsLeaderboard" class="card hidden">
-        <h2>All-Time Daily Wins</h2>
+        <div class="leaderboard-header">
+          <h2>All-Time Daily Wins</h2>
+          <button id="refreshDailyWins" class="btn secondary small">Refresh</button>
+        </div>
         <div class="table-wrap">
           <table class="table">
             <thead>
