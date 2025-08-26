@@ -97,9 +97,10 @@
     }
 
     try {
+      // Count daily wins across all game types
       const { data, error } = await window.supabase
         .from('daily_winners')
-        .select('date')
+        .select('date, game_type')
         .eq('user_id', gameState.user.id);
 
       if (error) {
@@ -107,7 +108,17 @@
         return 0;
       }
 
-      return data ? data.length : 0;
+      if (!data || data.length === 0) {
+        return 0;
+      }
+
+      // Count unique dates (each date can have up to 4 wins - one per game type)
+      const uniqueDates = new Set(data.map(win => win.date));
+      const totalWins = data.length;
+      
+      console.log(`User has ${totalWins} total daily wins across ${uniqueDates.size} different days`);
+      
+      return totalWins;
     } catch (error) {
       console.error('Exception in fetchDailyWins:', error);
       return 0;
@@ -412,7 +423,7 @@
     try {
       const { data, error } = await window.supabase
         .from('daily_winners')
-        .select('user_id, date')
+        .select('user_id, date, game_type')
         .order('date', { ascending: false });
 
       if (error) {
@@ -420,10 +431,26 @@
         return [];
       }
 
-      // Count wins per user
+      if (!data || data.length === 0) {
+        return [];
+      }
+
+      // Count wins per user across all game types
       const winsByUser = {};
       data.forEach(win => {
-        winsByUser[win.user_id] = (winsByUser[win.user_id] || 0) + 1;
+        if (!winsByUser[win.user_id]) {
+          winsByUser[win.user_id] = {
+            totalWins: 0,
+            winsByGame: {
+              math: 0,
+              flags: 0,
+              capitals: 0,
+              logos: 0
+            }
+          };
+        }
+        winsByUser[win.user_id].totalWins++;
+        winsByUser[win.user_id].winsByGame[win.game_type]++;
       });
 
       // Get user profiles for display names
@@ -440,12 +467,13 @@
 
       const nameById = Object.fromEntries(profiles.map(p => [p.id, p.display_name]));
       
-      // Convert to array and sort by wins
-      const leaderboardData = Object.entries(winsByUser).map(([userId, wins]) => ({
+      // Convert to array and sort by total wins
+      const leaderboardData = Object.entries(winsByUser).map(([userId, winData]) => ({
         userId,
         name: nameById[userId] || 'Player',
-        wins
-      })).sort((a, b) => b.wins - a.wins);
+        totalWins: winData.totalWins,
+        winsByGame: winData.winsByGame
+      })).sort((a, b) => b.totalWins - a.totalWins);
 
       return leaderboardData;
     } catch (error) {
@@ -464,7 +492,7 @@
       if (entries.length === 0) {
         const tr = document.createElement('tr');
         const td = document.createElement('td');
-        td.colSpan = 3;
+        td.colSpan = 4; // Updated to 4 columns
         td.textContent = 'No daily wins yet. Be the first!';
         td.style.color = '#94a3b8';
         tr.appendChild(td);
@@ -483,9 +511,22 @@
         name.textContent = entry.name;
         tr.appendChild(name);
 
-        const wins = document.createElement('td');
-        wins.textContent = String(entry.wins);
-        tr.appendChild(wins);
+        const totalWins = document.createElement('td');
+        totalWins.textContent = String(entry.totalWins);
+        tr.appendChild(totalWins);
+
+        // Add breakdown by game type
+        const breakdown = document.createElement('td');
+        const gameBreakdown = [];
+        if (entry.winsByGame.math > 0) gameBreakdown.push(`Math: ${entry.winsByGame.math}`);
+        if (entry.winsByGame.flags > 0) gameBreakdown.push(`Flags: ${entry.winsByGame.flags}`);
+        if (entry.winsByGame.capitals > 0) gameBreakdown.push(`Capitals: ${entry.winsByGame.capitals}`);
+        if (entry.winsByGame.logos > 0) gameBreakdown.push(`Logos: ${entry.winsByGame.logos}`);
+        
+        breakdown.textContent = gameBreakdown.join(', ') || 'None';
+        breakdown.style.fontSize = '0.8em';
+        breakdown.style.color = '#94a3b8';
+        tr.appendChild(breakdown);
 
         tbody.appendChild(tr);
       });
