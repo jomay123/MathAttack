@@ -1768,7 +1768,7 @@
       { team: 'Atletico Madrid', badgeUrl: 'Logos/Spain - LaLiga/Atletico de Madrid.png' },
       { team: 'Barcelona', badgeUrl: 'Logos/Spain - LaLiga/FC Barcelona.png' },
       { team: 'Celta de Vigo', badgeUrl: 'Logos/Spain - LaLiga/Celta de Vigo.png' },
-      { team: 'Deportivo Alaves', badgeUrl: 'Logos/Spain - LaLiga/Deportivo Alaves.png' },
+      { team: 'Deportivo Alavés', badgeUrl: 'Logos/Spain - LaLiga/Deportivo Alaves.png' },
       { team: 'Elche CF', badgeUrl: 'Logos/Spain - LaLiga/Elche CF.png' },
       { team: 'FC Barcelona', badgeUrl: 'Logos/Spain - LaLiga/FC Barcelona.png' },
       { team: 'Girona', badgeUrl: 'Logos/Spain - LaLiga/Girona FC.png' },
@@ -1777,7 +1777,7 @@
       { team: 'RCD Espanyol Barcelona', badgeUrl: 'Logos/Spain - LaLiga/RCD Espanyol Barcelona.png' },
       { team: 'RCD Mallorca', badgeUrl: 'Logos/Spain - LaLiga/RCD Mallorca.png' },
       { team: 'Rayo Vallecano', badgeUrl: 'Logos/Spain - LaLiga/Rayo Vallecano.png' },
-      { team: 'Real Betis Balompie', badgeUrl: 'Logos/Spain - LaLiga/Real Betis Balompie.png' },
+      { team: 'Real Betis Balompié', badgeUrl: 'Logos/Spain - LaLiga/Real Betis Balompie.png' },
       { team: 'Real Madrid', badgeUrl: 'Logos/Spain - LaLiga/Real Madrid.png' },
       { team: 'Real Oviedo', badgeUrl: 'Logos/Spain - LaLiga/Real Oviedo.png' },
       { team: 'Real Sociedad', badgeUrl: 'Logos/Spain - LaLiga/Real Sociedad.png' },
@@ -1849,7 +1849,19 @@
     els.questionText.innerHTML = '';
     
     const badgeImg = document.createElement('img');
-    badgeImg.src = q.badgeUrl;
+    
+    // Try to fix image loading issues with special characters
+    let imageSrc = q.badgeUrl;
+    
+    // If the path contains special characters, try encoding it
+    if (imageSrc.includes(' ') || imageSrc.includes('&') || imageSrc.includes("'") || imageSrc.includes('"')) {
+      // Try the encoded version first
+      const encodedPath = encodeImagePath ? encodeImagePath(q.badgeUrl) : q.badgeUrl;
+      imageSrc = encodedPath;
+      console.log('Using encoded path:', encodedPath);
+    }
+    
+    badgeImg.src = imageSrc;
     badgeImg.alt = 'Soccer team badge';
     badgeImg.style.width = '200px';
     badgeImg.style.height = 'auto';
