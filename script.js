@@ -49,7 +49,19 @@
     refreshFlagsLeaderboard: document.getElementById('refreshFlagsLeaderboard'),
     refreshCapitalsLeaderboard: document.getElementById('refreshCapitalsLeaderboard'),
     refreshLogosLeaderboard: document.getElementById('refreshLogosLeaderboard'),
-    refreshDailyWins: document.getElementById('refreshDailyWins')
+    refreshDailyWins: document.getElementById('refreshDailyWins'),
+    
+    // Currency and profile elements
+    userCoins: document.getElementById('userCoins'),
+    coinsAmount: document.getElementById('coinsAmount'),
+    profileBtn: document.getElementById('profileBtn'),
+    profileModal: document.getElementById('profileModal'),
+    avatarGrid: document.getElementById('avatarGrid'),
+    achievementsGrid: document.getElementById('achievementsGrid'),
+    profileCoins: document.getElementById('profileCoins'),
+    profileDailyWins: document.getElementById('profileDailyWins'),
+    profileQuestionsAnswered: document.getElementById('profileQuestionsAnswered'),
+    closeProfile: document.getElementById('closeProfile')
   };
 
   let gameState = {
@@ -63,7 +75,14 @@
     scoreSubmitted: false,
     user: null,
     isAuthenticated: false,
-    eventsBound: false
+    eventsBound: false,
+    userStats: {
+      mathQuestions: 0,
+      flagsQuestions: 0,
+      capitalsQuestions: 0,
+      logosQuestions: 0,
+      totalQuestions: 0
+    }
   };
 
   // Check if user is already logged in
@@ -132,13 +151,472 @@
         const wins = await fetchDailyWins();
         els.dailyWins.textContent = wins;
         els.dailyWins.parentElement.classList.remove('hidden');
+        els.profileBtn.classList.remove('hidden');
       } else {
         els.dailyWins.parentElement.classList.add('hidden');
+        els.profileBtn.classList.add('hidden');
       }
     } catch (error) {
       console.error('Error updating daily wins display:', error);
       // Hide display on error
       els.dailyWins.parentElement.classList.add('hidden');
+      els.profileBtn.classList.add('hidden');
+    }
+  }
+
+  // Fetch user's coins
+  async function fetchUserCoins() {
+    if (!gameState.user) return 0;
+    
+    try {
+      const { data, error } = await window.supabase
+        .from('users')
+        .select('coins')
+        .eq('id', gameState.user.id)
+        .single();
+      
+      if (error) {
+        console.error('Error fetching user coins:', error);
+        return 0;
+      }
+      
+      return data?.coins || 0;
+    } catch (error) {
+      console.error('Exception in fetchUserCoins:', error);
+      return 0;
+    }
+  }
+
+  // Update coins display
+  async function updateCoinsDisplay() {
+    try {
+      if (gameState.isAuthenticated && gameState.user) {
+        const coins = await fetchUserCoins();
+        els.coinsAmount.textContent = coins;
+        els.userCoins.parentElement.classList.remove('hidden');
+        els.profileBtn.classList.remove('hidden');
+      } else {
+        els.userCoins.parentElement.classList.add('hidden');
+        els.profileBtn.classList.add('hidden');
+      }
+    } catch (error) {
+      console.error('Error updating coins display:', error);
+      els.userCoins.parentElement.classList.add('hidden');
+      els.profileBtn.classList.add('hidden');
+    }
+  }
+
+  // Award coins to user
+  async function awardCoins(amount, reason = 'Game reward') {
+    if (!gameState.user || amount <= 0) return false;
+    
+    try {
+      // First get current coins
+      const { data: currentUser, error: fetchError } = await window.supabase
+        .from('users')
+        .select('coins')
+        .eq('id', gameState.user.id)
+        .single();
+      
+      if (fetchError) {
+        console.error('Error fetching current coins:', fetchError);
+        return false;
+      }
+      
+      const newCoins = (currentUser?.coins || 0) + amount;
+      
+      // Update with new total
+      const { error: updateError } = await window.supabase
+        .from('users')
+        .update({ coins: newCoins })
+        .eq('id', gameState.user.id);
+      
+      if (updateError) {
+        console.error('Error updating coins:', updateError);
+        return false;
+      }
+      
+      // Update display
+      await updateCoinsDisplay();
+      
+      // Show notification
+      showNotification(`+${amount} coins for ${reason}!`, 'success');
+      
+      return true;
+    } catch (error) {
+      console.error('Exception in awardCoins:', error);
+      return false;
+    }
+  }
+
+  // Check and award achievements
+  async function checkAchievements() {
+    if (!gameState.user) return;
+    
+    try {
+      // Get all achievements
+      const { data: achievements, error: achievementsError } = await window.supabase
+        .from('achievements')
+        .select('*');
+      
+      if (achievementsError) {
+        console.error('Error fetching achievements:', error);
+        return;
+      }
+      
+      // Get user's earned achievements
+      const { data: userAchievements, error: userAchievementsError } = await window.supabase
+        .from('user_achievements')
+        .select('achievement_id')
+        .eq('user_id', gameState.user.id);
+      
+      if (userAchievementsError) {
+        console.error('Error fetching user achievements:', error);
+        return;
+      }
+      
+      const earnedAchievementIds = new Set(userAchievements.map(ua => ua.achievement_id));
+      
+      // Check each achievement
+      for (const achievement of achievements) {
+        if (earnedAchievementIds.has(achievement.id)) continue;
+        
+        let shouldAward = false;
+        
+        switch (achievement.requirement_type) {
+          case 'math_questions':
+            shouldAward = gameState.userStats.mathQuestions >= achievement.requirement_value;
+            break;
+          case 'flags_questions':
+            shouldAward = gameState.userStats.flagsQuestions >= achievement.requirement_value;
+            break;
+          case 'capitals_questions':
+            shouldAward = gameState.userStats.capitalsQuestions >= achievement.requirement_value;
+            break;
+          case 'logos_questions':
+            shouldAward = gameState.userStats.logosQuestions >= achievement.requirement_value;
+            break;
+          case 'total_questions':
+            shouldAward = gameState.userStats.totalQuestions >= achievement.requirement_value;
+            break;
+          case 'daily_wins':
+            const dailyWins = await fetchDailyWins();
+            shouldAward = dailyWins >= achievement.requirement_value;
+            break;
+        }
+        
+        if (shouldAward) {
+          await awardAchievement(achievement);
+        }
+      }
+    } catch (error) {
+      console.error('Exception in checkAchievements:', error);
+    }
+  }
+
+  // Award achievement to user
+  async function awardAchievement(achievement) {
+    if (!gameState.user) return false;
+    
+    try {
+      // Insert user achievement
+      const { error: insertError } = await window.supabase
+        .from('user_achievements')
+        .insert({
+          user_id: gameState.user.id,
+          achievement_id: achievement.id
+        });
+      
+      if (insertError) {
+        console.error('Error inserting user achievement:', error);
+        return false;
+      }
+      
+      // Award coins
+      if (achievement.coins_reward > 0) {
+        await awardCoins(achievement.coins_reward, `Achievement: ${achievement.name}`);
+      }
+      
+      // Show notification
+      showNotification(`🏆 Achievement Unlocked: ${achievement.name}!`, 'success');
+      
+      return true;
+    } catch (error) {
+      console.error('Exception in awardAchievement:', error);
+      return false;
+    }
+  }
+
+  // Show notification
+  function showNotification(message, type = 'info') {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.textContent = message;
+    
+    // Add to page
+    document.body.appendChild(notification);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+      notification.remove();
+    }, 3000);
+  }
+
+  // Show profile modal
+  function showProfileModal() {
+    els.profileModal.classList.remove('hidden');
+    loadProfileData();
+  }
+
+  // Hide profile modal
+  function hideProfileModal() {
+    els.profileModal.classList.add('hidden');
+  }
+
+  // Load profile data
+  async function loadProfileData() {
+    if (!gameState.user) return;
+    
+    try {
+      // Load coins
+      const coins = await fetchUserCoins();
+      els.profileCoins.textContent = coins;
+      
+      // Load daily wins
+      const dailyWins = await fetchDailyWins();
+      els.profileDailyWins.textContent = dailyWins;
+      
+      // Load questions answered
+      els.profileQuestionsAnswered.textContent = gameState.userStats.totalQuestions;
+      
+      // Load avatars
+      await loadAvatars();
+      
+      // Load achievements
+      await loadAchievements();
+      
+    } catch (error) {
+      console.error('Error loading profile data:', error);
+    }
+  }
+
+  // Load avatars
+  async function loadAvatars() {
+    try {
+      // Get all avatars
+      const { data: avatars, error: avatarsError } = await window.supabase
+        .from('avatars')
+        .select('*')
+        .order('cost', { ascending: true });
+      
+      if (avatarsError) {
+        console.error('Error fetching avatars:', error);
+        return;
+      }
+      
+      // Get user's purchased avatars
+      const { data: userAvatars, error: userAvatarsError } = await window.supabase
+        .from('user_avatars')
+        .select('avatar_id, is_equipped')
+        .eq('user_id', gameState.user.id);
+      
+      if (userAvatarsError) {
+        console.error('Error fetching user avatars:', error);
+        return;
+      }
+      
+      const userAvatarIds = new Set(userAvatars.map(ua => ua.avatar_id));
+      const equippedAvatarId = userAvatars.find(ua => ua.is_equipped)?.avatar_id;
+      
+      // Clear grid
+      els.avatarGrid.innerHTML = '';
+      
+      // Add each avatar
+      for (const avatar of avatars) {
+        const avatarElement = document.createElement('div');
+        avatarElement.className = 'avatar-option';
+        avatarElement.dataset.avatarId = avatar.id;
+        
+        if (avatar.is_default || userAvatarIds.has(avatar.id)) {
+          // Available avatar
+          if (equippedAvatarId === avatar.id) {
+            avatarElement.classList.add('equipped');
+          }
+          
+          avatarElement.addEventListener('click', () => equipAvatar(avatar.id));
+        } else {
+          // Locked avatar
+          avatarElement.classList.add('locked');
+          avatarElement.addEventListener('click', () => purchaseAvatar(avatar));
+        }
+        
+        avatarElement.innerHTML = `
+          <div class="avatar-icon">${avatar.image_url}</div>
+          <div class="avatar-name">${avatar.name}</div>
+          ${!avatar.is_default && !userAvatarIds.has(avatar.id) ? `<div class="avatar-cost">${avatar.cost} coins</div>` : ''}
+        `;
+        
+        els.avatarGrid.appendChild(avatarElement);
+      }
+      
+    } catch (error) {
+      console.error('Exception in loadAvatars:', error);
+    }
+  }
+
+  // Load achievements
+  async function loadAchievements() {
+    try {
+      // Get all achievements
+      const { data: achievements, error: achievementsError } = await window.supabase
+        .from('achievements')
+        .select('*')
+        .order('requirement_value', { ascending: true });
+      
+      if (achievementsError) {
+        console.error('Error fetching achievements:', error);
+        return;
+      }
+      
+      // Get user's earned achievements
+      const { data: userAchievements, error: userAchievementsError } = await window.supabase
+        .from('user_achievements')
+        .select('achievement_id')
+        .eq('user_id', gameState.user.id);
+      
+      if (userAchievementsError) {
+        console.error('Error fetching user achievements:', error);
+        return;
+      }
+      
+      const earnedAchievementIds = new Set(userAchievements.map(ua => ua.achievement_id));
+      
+      // Clear grid
+      els.achievementsGrid.innerHTML = '';
+      
+      // Add each achievement
+      for (const achievement of achievements) {
+        const achievementElement = document.createElement('div');
+        achievementElement.className = 'achievement-item';
+        
+        if (earnedAchievementIds.has(achievement.id)) {
+          achievementElement.classList.add('earned');
+        }
+        
+        achievementElement.innerHTML = `
+          <div class="achievement-icon">${achievement.icon}</div>
+          <div class="achievement-info">
+            <div class="achievement-name">${achievement.name}</div>
+            <div class="achievement-description">${achievement.description}</div>
+            <div class="achievement-reward">+${achievement.coins_reward} coins</div>
+          </div>
+        `;
+        
+        els.achievementsGrid.appendChild(achievementElement);
+      }
+      
+    } catch (error) {
+      console.error('Exception in loadAchievements:', error);
+    }
+  }
+
+  // Equip avatar
+  async function equipAvatar(avatarId) {
+    if (!gameState.user) return;
+    
+    try {
+      // Unequip all avatars
+      const { error: unequipError } = await window.supabase
+        .from('user_avatars')
+        .update({ is_equipped: false })
+        .eq('user_id', gameState.user.id);
+      
+      if (unequipError) {
+        console.error('Error unequipping avatars:', error);
+        return;
+      }
+      
+      // Equip selected avatar
+      const { error: equipError } = await window.supabase
+        .from('user_avatars')
+        .update({ is_equipped: true })
+        .eq('user_id', gameState.user.id)
+        .eq('avatar_id', avatarId);
+      
+      if (equipError) {
+        console.error('Error equipping avatar:', error);
+        return;
+      }
+      
+      // Update user's current avatar
+      const { error: updateError } = await window.supabase
+        .from('users')
+        .update({ current_avatar_id: avatarId })
+        .eq('id', gameState.user.id);
+      
+      if (updateError) {
+        console.error('Error updating user avatar:', error);
+        return;
+      }
+      
+      // Reload avatars
+      await loadAvatars();
+      
+      showNotification('Avatar equipped successfully!', 'success');
+      
+    } catch (error) {
+      console.error('Exception in equipAvatar:', error);
+    }
+  }
+
+  // Purchase avatar
+  async function purchaseAvatar(avatar) {
+    if (!gameState.user) return;
+    
+    try {
+      const userCoins = await fetchUserCoins();
+      
+      if (userCoins < avatar.cost) {
+        showNotification('Not enough coins to purchase this avatar!', 'error');
+        return;
+      }
+      
+      // Deduct coins
+      const { error: deductError } = await window.supabase
+        .from('users')
+        .update({ coins: userCoins - avatar.cost })
+        .eq('id', gameState.user.id);
+      
+      if (deductError) {
+        console.error('Error deducting coins:', error);
+        return;
+      }
+      
+      // Add avatar to user's collection
+      const { error: addError } = await window.supabase
+        .from('user_avatars')
+        .insert({
+          user_id: gameState.user.id,
+          avatar_id: avatar.id,
+          is_equipped: false
+        });
+      
+      if (addError) {
+        console.error('Error adding avatar:', error);
+        return;
+      }
+      
+      // Update display
+      await updateCoinsDisplay();
+      
+      // Reload avatars
+      await loadAvatars();
+      
+      showNotification(`Avatar "${avatar.name}" purchased successfully!`, 'success');
+      
+    } catch (error) {
+      console.error('Exception in purchaseAvatar:', error);
     }
   }
 
@@ -1350,6 +1828,16 @@
         const remaining = Math.max(0, gameState.deadlineTs - now());
         const earned = computePoints(remaining);
         gameState.score += earned;
+        
+        // Award coins and track statistics
+        if (gameState.isAuthenticated) {
+          // Temporarily disabled until database is set up
+          // await awardCoins(5, 'Correct math answer');
+          gameState.userStats.mathQuestions++;
+          gameState.userStats.totalQuestions++;
+          // await checkAchievements();
+        }
+        
         updateScoreUI();
         showMathQuestion();
       } else {
@@ -1361,6 +1849,16 @@
         const remaining = Math.max(0, gameState.deadlineTs - now());
         const earned = computePoints(remaining);
         gameState.score += earned;
+        
+        // Award coins and track statistics
+        if (gameState.isAuthenticated) {
+          // Temporarily disabled until database is set up
+          // await awardCoins(5, 'Correct flag answer');
+          gameState.userStats.flagsQuestions++;
+          gameState.userStats.totalQuestions++;
+          // await checkAchievements();
+        }
+        
         updateScoreUI();
         showFlagQuestion();
       } else {
@@ -1372,6 +1870,16 @@
         const remaining = Math.max(0, gameState.deadlineTs - now());
         const earned = computePoints(remaining);
         gameState.score += earned;
+        
+        // Award coins and track statistics
+        if (gameState.isAuthenticated) {
+          // Temporarily disabled until database is set up
+          // await awardCoins(5, 'Correct capital answer');
+          gameState.userStats.capitalsQuestions++;
+          gameState.userStats.totalQuestions++;
+          // await checkAchievements();
+        }
+        
         updateScoreUI();
         showCapitalQuestion();
       } else {
@@ -1383,6 +1891,16 @@
         const remaining = Math.max(0, gameState.deadlineTs - now());
         const earned = computePoints(remaining);
         gameState.score += earned;
+        
+        // Award coins and track statistics
+        if (gameState.isAuthenticated) {
+          // Temporarily disabled until database is set up
+          // await awardCoins(5, 'Correct football badge answer');
+          gameState.userStats.logosQuestions++;
+          gameState.userStats.totalQuestions++;
+          // await checkAchievements();
+        }
+        
         updateScoreUI();
         showFootballBadgeQuestion();
       } else {
@@ -1579,6 +2097,10 @@
     els.refreshCapitalsLeaderboard.addEventListener('click', () => renderLeaderboard('capitals'));
     els.refreshLogosLeaderboard.addEventListener('click', () => renderLeaderboard('logos'));
     els.refreshDailyWins.addEventListener('click', renderDailyWinsLeaderboard);
+    
+    // Profile events
+    els.profileBtn.addEventListener('click', showProfileModal);
+    els.closeProfile.addEventListener('click', hideProfileModal);
   }
 
   // Initialize the game
@@ -1599,6 +2121,11 @@
     if (isLoggedIn) {
       console.log('User is logged in, showing setup');
       showSetup();
+      // Update displays for logged in user
+      await updateDailyWinsDisplay();
+      await updateCoinsDisplay();
+      // Test database schema
+      await testDatabaseSchema();
     } else {
       console.log('User not logged in, showing login modal');
       showLoginModal();
@@ -1623,6 +2150,102 @@
       showLoginModal();
     }
   });
+
+  // Award coins for daily wins (called by Edge Function)
+  async function awardDailyWinCoins(gameType) {
+    if (!gameState.user) return false;
+    
+    try {
+      // Award 50 coins for daily win
+      const success = await awardCoins(50, `Daily ${gameType} winner!`);
+      
+      if (success) {
+        showNotification(`🏆 Daily ${gameType} winner! +50 coins!`, 'success');
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error awarding daily win coins:', error);
+      return false;
+    }
+  }
+
+  // Test database connection and schema
+  async function testDatabaseSchema() {
+    if (!gameState.user) return;
+    
+    try {
+      console.log('Testing database schema...');
+      
+      // Test if users table has coins column
+      const { data: userData, error: userError } = await window.supabase
+        .from('users')
+        .select('coins')
+        .eq('id', gameState.user.id)
+        .single();
+      
+      if (userError) {
+        console.error('Users table test failed:', userError);
+        if (userError.code === 'PGRST116') {
+          console.log('Users table exists but coins column might be missing');
+        }
+      } else {
+        console.log('Users table with coins column works:', userData);
+      }
+      
+      // Test achievements table
+      const { data: achievements, error: achievementsError } = await window.supabase
+        .from('achievements')
+        .select('count')
+        .limit(1);
+      
+      if (achievementsError) {
+        console.error('Achievements table test failed:', achievementsError);
+        if (achievementsError.code === 'PGRST116') {
+          console.log('Achievements table does not exist - need to run schema SQL');
+        }
+      } else {
+        console.log('Achievements table works');
+      }
+      
+      // Test avatars table
+      const { data: avatars, error: avatarsError } = await window.supabase
+        .from('avatars')
+        .select('count')
+        .limit(1);
+      
+      if (avatarsError) {
+        console.error('Avatars table test failed:', avatarsError);
+        if (avatarsError.code === 'PGRST116') {
+          console.log('Avatars table does not exist - need to run schema SQL');
+        }
+      } else {
+        console.log('Avatars table works');
+      }
+      
+    } catch (error) {
+      console.error('Exception in testDatabaseSchema:', error);
+    }
+  }
+
+  // Award coins for new high score
+  async function awardHighScoreCoins() {
+    if (!gameState.user) return false;
+    
+    try {
+      // Award 25 coins for new high score
+      const success = await awardCoins(25, 'New high score!');
+      
+      if (success) {
+        showNotification(`⭐ New high score! +25 coins!`, 'success');
+      }
+      
+      return success;
+    } catch (error) {
+      console.error('Error awarding high score coins:', error);
+      return false;
+    }
+  }
 
   document.addEventListener('DOMContentLoaded', init);
 

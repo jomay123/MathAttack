@@ -29,6 +29,8 @@
         <div class="stat"><span id="score">0</span> Score</div>
         <div class="stat timer"><span id="time">10.0</span>s</div>
         <div class="stat daily-wins hidden"><span id="dailyWins">0</span> Daily Wins</div>
+        <div class="stat coins hidden"><span id="userCoins">🪙 <span id="coinsAmount">0</span></span></div>
+        <button id="profileBtn" class="btn secondary small">Profile</button>
       </div>
     </header>
 
@@ -49,6 +51,52 @@
         
         <div class="modal-footer">
           <button id="skipLogin" class="btn">Play Without Account</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Profile Modal -->
+    <div id="profileModal" class="modal hidden">
+      <div class="modal-content profile-modal-content">
+        <h2>User Profile</h2>
+        
+        <div class="profile-modal-body">
+          <div class="profile-section">
+            <h3>Avatar Selection</h3>
+            <div class="avatar-grid" id="avatarGrid">
+              <!-- Avatars will be loaded here -->
+            </div>
+            <p class="avatar-info">Click an avatar to equip it</p>
+          </div>
+          
+          <div class="profile-section">
+            <h3>Achievements</h3>
+            <div class="achievements-grid" id="achievementsGrid">
+              <!-- Achievements will be loaded here -->
+            </div>
+          </div>
+          
+          <div class="profile-section">
+            <h3>Statistics</h3>
+            <div class="stats-grid">
+              <div class="stat-item">
+                <span class="stat-label">Total Coins:</span>
+                <span class="stat-value" id="profileCoins">0</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">Daily Wins:</span>
+                <span class="stat-value" id="profileDailyWins">0</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">Questions Answered:</span>
+                <span class="stat-value" id="profileQuestionsAnswered">0</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="modal-footer">
+          <button id="closeProfile" class="btn secondary">Close</button>
         </div>
       </div>
     </div>
