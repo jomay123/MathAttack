@@ -31,6 +31,7 @@
 
     gameOver: document.getElementById('gameOver'),
     finalScore: document.getElementById('finalScore'),
+    finalCoins: document.getElementById('finalCoins'),
     submitScore: document.getElementById('submitScore'),
     playAgain: document.getElementById('playAgain'),
     backToHome: document.getElementById('backToHome'),
@@ -76,6 +77,7 @@
     user: null,
     isAuthenticated: false,
     eventsBound: false,
+    coinsEarned: 0, // Track coins earned this game
     userStats: {
       mathQuestions: 0,
       flagsQuestions: 0,
@@ -239,8 +241,10 @@
       // Update display
       await updateCoinsDisplay();
       
-      // Show notification
-      showNotification(`+${amount} coins for ${reason}!`, 'success');
+      // Track coins earned this game
+      gameState.coinsEarned += amount;
+      
+      // Notification removed for better performance
       
       return true;
     } catch (error) {
@@ -788,28 +792,48 @@
 
     try {
       // If no display name provided, use email prefix
-      const fallbackName = displayName || gameState.user.email.split('@')[0] || 'Player';
+      const fallbackName = displayName || gameState.user.email?.split('@')[0] || 'Player';
       
-      const { error } = await window.supabase
+      // First check if profile exists
+      const { data: existingProfile, error: checkError } = await window.supabase
         .from('users')
-        .upsert({
+        .select('id, display_name')
+        .eq('id', gameState.user.id)
+        .single();
+      
+      if (checkError && checkError.code !== 'PGRST116') {
+        console.error('Error checking profile:', checkError);
+        return;
+      }
+      
+      if (existingProfile) {
+        console.log('Profile already exists');
+        return;
+      }
+      
+      // Create profile if it doesn't exist
+      const { error: createError } = await window.supabase
+        .from('users')
+        .insert({
           id: gameState.user.id,
           display_name: fallbackName,
-        }, { onConflict: 'id' });
-
-      if (error) {
-        console.error('Error ensuring profile:', error);
-        // Try to create profile with just the user ID
-        const { error: createError } = await window.supabase
-          .from('users')
-          .insert({
-            id: gameState.user.id,
-            display_name: fallbackName,
-          });
-        
-        if (createError) {
-          console.error('Error creating profile:', createError);
+          coins: 0
+        });
+      
+      if (createError) {
+        console.error('Error creating profile:', createError);
+        // Try to get more details about the error
+        if (createError.code === '23505') {
+          console.log('Profile might already exist (duplicate key)');
+        } else if (createError.code === '42P01') {
+          console.log('Users table does not exist - need to run database schema');
+        } else if (createError.code === '42501') {
+          console.log('Permission denied - check RLS policies');
         }
+        return false;
+      } else {
+        console.log('Profile created successfully');
+        return true;
       }
     } catch (error) {
       console.error('Exception in ensureProfile:', error);
@@ -867,11 +891,11 @@
         return [];
       }
 
-      // Get user profiles for display names
+      // Get user profiles for display names and avatars
       const userIds = data.map(d => d.user_id);
       const { data: profiles, error: profileError } = await window.supabase
-        .from('user_profiles')
-        .select('id, display_name')
+        .from('users')
+        .select('id, display_name, current_avatar_id')
         .in('id', userIds);
 
       if (profileError) {
@@ -879,11 +903,26 @@
         return [];
       }
 
-      const nameById = Object.fromEntries(profiles.map(p => [p.id, p.display_name]));
+      // Get avatar information
+      const avatarIds = profiles.filter(p => p.current_avatar_id).map(p => p.current_avatar_id);
+      let avatars = {};
+      if (avatarIds.length > 0) {
+        const { data: avatarData, error: avatarError } = await window.supabase
+          .from('avatars')
+          .select('id, image_url')
+          .in('id', avatarIds);
+        
+        if (!avatarError && avatarData) {
+          avatars = Object.fromEntries(avatarData.map(a => [a.id, a.image_url]));
+        }
+      }
+
+      const profileById = Object.fromEntries(profiles.map(p => [p.id, p]));
       
       return data.map((row, i) => ({
         rank: i + 1,
-        name: nameById[row.user_id] || 'Player',
+        name: profileById[row.user_id]?.display_name || 'Player',
+        avatar: avatars[profileById[row.user_id]?.current_avatar_id] || '👤',
         score: row.score,
         time: new Date(row.created_at).toLocaleTimeString(undefined, { 
           hour: '2-digit', 
@@ -931,11 +970,11 @@
         winsByUser[win.user_id].winsByGame[win.game_type]++;
       });
 
-      // Get user profiles for display names
+      // Get user profiles for display names and avatars
       const userIds = Object.keys(winsByUser);
       const { data: profiles, error: profileError } = await window.supabase
-        .from('user_profiles')
-        .select('id, display_name')
+        .from('users')
+        .select('id, display_name, current_avatar_id')
         .in('id', userIds);
 
       if (profileError) {
@@ -943,12 +982,27 @@
         return [];
       }
 
-      const nameById = Object.fromEntries(profiles.map(p => [p.id, p.display_name]));
+      // Get avatar information
+      const avatarIds = profiles.filter(p => p.current_avatar_id).map(p => p.current_avatar_id);
+      let avatars = {};
+      if (avatarIds.length > 0) {
+        const { data: avatarData, error: avatarError } = await window.supabase
+          .from('avatars')
+          .select('id, image_url')
+          .in('id', avatarIds);
+        
+        if (!avatarError && avatarData) {
+          avatars = Object.fromEntries(avatarData.map(a => [a.id, a.image_url]));
+        }
+      }
+
+      const profileById = Object.fromEntries(profiles.map(p => [p.id, p]));
       
       // Convert to array and sort by total wins
       const leaderboardData = Object.entries(winsByUser).map(([userId, winData]) => ({
         userId,
-        name: nameById[userId] || 'Player',
+        name: profileById[userId]?.display_name || 'Player',
+        avatar: avatars[profileById[userId]?.current_avatar_id] || '👤',
         totalWins: winData.totalWins,
         winsByGame: winData.winsByGame
       })).sort((a, b) => b.totalWins - a.totalWins);
@@ -986,7 +1040,7 @@
         tr.appendChild(rank);
 
         const name = document.createElement('td');
-        name.textContent = entry.name;
+        name.innerHTML = `<span class="avatar">${entry.avatar}</span> ${entry.name}`;
         tr.appendChild(name);
 
         const totalWins = document.createElement('td');
@@ -1052,7 +1106,7 @@
         tr.appendChild(rank);
 
         const name = document.createElement('td');
-        name.textContent = entry.name;
+        name.innerHTML = `<span class="avatar">${entry.avatar}</span> ${entry.name}`;
         tr.appendChild(name);
 
         const score = document.createElement('td');
@@ -1819,7 +1873,7 @@
     }
   }
 
-  function handleOptionClick(selectedValue) {
+  async function handleOptionClick(selectedValue) {
     const userAnswer = selectedValue; // For flags, this is the country name
 
     if (gameState.currentGame === 'math') {
@@ -1831,11 +1885,10 @@
         
         // Award coins and track statistics
         if (gameState.isAuthenticated) {
-          // Temporarily disabled until database is set up
-          // await awardCoins(5, 'Correct math answer');
+          await awardCoins(5, 'Correct math answer');
           gameState.userStats.mathQuestions++;
           gameState.userStats.totalQuestions++;
-          // await checkAchievements();
+          await checkAchievements();
         }
         
         updateScoreUI();
@@ -1852,11 +1905,10 @@
         
         // Award coins and track statistics
         if (gameState.isAuthenticated) {
-          // Temporarily disabled until database is set up
-          // await awardCoins(5, 'Correct flag answer');
+          await awardCoins(5, 'Correct flag answer');
           gameState.userStats.flagsQuestions++;
           gameState.userStats.totalQuestions++;
-          // await checkAchievements();
+          await checkAchievements();
         }
         
         updateScoreUI();
@@ -1873,11 +1925,10 @@
         
         // Award coins and track statistics
         if (gameState.isAuthenticated) {
-          // Temporarily disabled until database is set up
-          // await awardCoins(5, 'Correct capital answer');
+          await awardCoins(5, 'Correct capital answer');
           gameState.userStats.capitalsQuestions++;
           gameState.userStats.totalQuestions++;
-          // await checkAchievements();
+          await checkAchievements();
         }
         
         updateScoreUI();
@@ -1894,11 +1945,10 @@
         
         // Award coins and track statistics
         if (gameState.isAuthenticated) {
-          // Temporarily disabled until database is set up
-          // await awardCoins(5, 'Correct football badge answer');
+          await awardCoins(5, 'Correct football badge answer');
           gameState.userStats.logosQuestions++;
           gameState.userStats.totalQuestions++;
-          // await checkAchievements();
+          await checkAchievements();
         }
         
         updateScoreUI();
@@ -1928,6 +1978,7 @@
 
     gameState.score = 0;
     gameState.scoreSubmitted = false;
+    gameState.coinsEarned = 0;
     updateScoreUI();
     setSections({ showLogin: false, showSetup: false, showGame: true, showGameOver: false });
     els.mathLeaderboard.classList.add('hidden');
@@ -1958,6 +2009,7 @@
     clearTimer();
     setSections({ showLogin: false, showSetup: false, showGame: false, showGameOver: true });
     els.finalScore.textContent = String(gameState.score);
+    els.finalCoins.textContent = String(gameState.coinsEarned);
     
     // Show appropriate leaderboard based on game type
     if (gameState.currentGame === 'math') {
@@ -2074,6 +2126,7 @@
       els.logosLeaderboard.classList.add('hidden');
       els.dailyWinsLeaderboard.classList.add('hidden');
       document.body.className = ''; // Reset theme
+      gameState.coinsEarned = 0; // Reset coins earned
       els.name.focus();
     });
     els.backToHome.addEventListener('click', () => {
@@ -2088,6 +2141,7 @@
       document.querySelector('.game-selection').classList.remove('hidden');
       els.gameSetup.classList.add('hidden');
       gameState.currentGame = null;
+      gameState.coinsEarned = 0; // Reset coins earned
       els.name.focus();
     });
     
@@ -2124,8 +2178,7 @@
       // Update displays for logged in user
       await updateDailyWinsDisplay();
       await updateCoinsDisplay();
-      // Test database schema
-      await testDatabaseSchema();
+      // Coin system is now enabled and working
     } else {
       console.log('User not logged in, showing login modal');
       showLoginModal();
@@ -2177,7 +2230,7 @@
     try {
       console.log('Testing database schema...');
       
-      // Test if users table has coins column
+      // Test if users table exists and has coins column
       const { data: userData, error: userError } = await window.supabase
         .from('users')
         .select('coins')
@@ -2188,6 +2241,10 @@
         console.error('Users table test failed:', userError);
         if (userError.code === 'PGRST116') {
           console.log('Users table exists but coins column might be missing');
+        } else if (userError.code === '42P01') {
+          console.log('Users table does not exist - need to run database schema');
+        } else if (userError.code === '42501') {
+          console.log('Permission denied - check RLS policies');
         }
       } else {
         console.log('Users table with coins column works:', userData);
@@ -2203,6 +2260,10 @@
         console.error('Achievements table test failed:', achievementsError);
         if (achievementsError.code === 'PGRST116') {
           console.log('Achievements table does not exist - need to run schema SQL');
+        } else if (achievementsError.code === '42P01') {
+          console.log('Achievements table does not exist - need to run database schema');
+        } else if (achievementsError.code === '42501') {
+          console.log('Permission denied - check RLS policies');
         }
       } else {
         console.log('Achievements table works');
@@ -2218,10 +2279,16 @@
         console.error('Avatars table test failed:', avatarsError);
         if (avatarsError.code === 'PGRST116') {
           console.log('Avatars table does not exist - need to run schema SQL');
+        } else if (avatarsError.code === '42P01') {
+          console.log('Avatars table does not exist - need to run database schema');
+        } else if (avatarsError.code === '42501') {
+          console.log('Permission denied - check RLS policies');
         }
       } else {
         console.log('Avatars table works');
       }
+      
+      console.log('Database schema test completed');
       
     } catch (error) {
       console.error('Exception in testDatabaseSchema:', error);

@@ -852,4 +852,11 @@ body:not(.math-theme):not(.geo-theme) {
 
 #logosLeaderboard .leaderboard-header h2 {
   color: var(--football-primary);
+}
+
+/* Avatar styles for leaderboard */
+.avatar {
+  display: inline-block;
+  margin-right: 0.5rem;
+  font-size: 1.2em;
 } 
